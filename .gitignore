@@ -1,0 +1,108 @@
+# Data files
+data/
+*_20[0-9][0-9].json
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+_version.py
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.env.local
+.env.blablador
+.env.hzdr
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database files (now in data/ directory which is already ignored)
+# Keep patterns here in case someone puts DBs elsewhere
+*.db
+*.sqlite
+*.sqlite3
+
+# Debug files
+page_source.html
+
+# macOS
+.DS_Store
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# CSV exports
+*.csv
+
+# Node
+node_modules/
+coverage/
+
+# Web UI vendor files no longer installed via npm so we don't need npm for production, only for development
+# Ignore all files in vendor directory except README.md
+# src/abstracts_explorer/web_ui/static/vendor/
+# Ignore all webfonts
+# src/abstracts_explorer/web_ui/static/webfonts/
+

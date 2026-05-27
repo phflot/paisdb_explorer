@@ -1,0 +1,208 @@
+/* Additional custom styles for NeurIPS Abstracts Web UI */
+
+/* Ensure smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Disable Plotly hover label transitions */
+.hoverlayer .hovertext {
+    transition: none !important;
+}
+
+.hoverlayer {
+    transition: none !important;
+}
+
+/* Paper card transitions */
+.paper-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Focus styles for accessibility */
+button:focus,
+input:focus,
+select:focus {
+    outline: none;
+}
+
+/* Ensure header conference/year selectors are readable regardless of OS color scheme.
+   On Linux Chromium in dark mode the native dropdown popup can render with a light
+   background while inheriting color:white from the parent <select>, making options
+   invisible.  appearance:none removes native OS widget styling so our CSS bg/color
+   apply directly; the explicit option rules ensure the popup is readable on all
+   browsers that honour CSS on <option> elements.
+   A custom SVG chevron replaces the native dropdown arrow. */
+#conference-selector,
+#year-selector {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='white'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+}
+
+#conference-selector option,
+#year-selector option {
+    color: black;
+    background-color: white;
+}
+
+/* Chat message formatting */
+.chat-message p {
+    line-height: 1.6;
+}
+
+/* Chat feedback buttons */
+.chat-feedback-btn {
+    cursor: pointer;
+    border: none;
+    background: none;
+    line-height: 1;
+}
+
+.chat-feedback-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+/* Feedback highlight animation – runs once on the first assistant message */
+@keyframes feedbackHighlight {
+    0% { background-color: transparent; }
+        30% {
+            background-color: rgba(135, 255, 95, 0.522);
+        }
+    100% { background-color: transparent; }
+}
+
+.feedback-highlight {
+    animation: feedbackHighlight 2s ease-out;
+    border-radius: 4px;
+}
+
+/* Feedback bounce animation – makes rating buttons jump once on first appearance */
+@keyframes feedbackBounce {
+    0%   { transform: translateY(0); }
+    25%  { transform: translateY(-6px); }
+    50%  { transform: translateY(0); }
+    75%  { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
+}
+
+.feedback-bounce {
+    animation: feedbackBounce 0.7s ease;
+}
+
+/* MCP Tools hint bubble */
+.mcp-tools-hint {
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes mcpHintHide {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-8px); }
+}
+
+.mcp-tools-hint-hide {
+    animation: mcpHintHide 0.3s ease forwards;
+}
+
+/* Code blocks in chat (if LLM returns code) */
+.chat-message code {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+/* Star rating styles */
+.fa-star {
+    transition: color 0.15s ease, transform 0.1s ease;
+    color: #FBBF24;
+    /* Default yellow color */
+}
+
+.fa-star:hover {
+    transform: scale(1.15);
+    /* Yellow color on hover */
+}
+
+.fa-star:active {
+    transform: scale(0.95);
+    /* Yellow color on click */
+}
+/* Abstract expand/collapse toggle */
+details.abstract-details .abstract-full {
+    display: none;
+}
+
+details.abstract-details[open] .abstract-preview {
+    display: none;
+}
+
+details.abstract-details[open] .abstract-full {
+    display: block;
+}
+
+details.abstract-details > summary {
+    list-style: none;
+}
+
+details.abstract-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .paper-card {
+        padding: 1rem;
+    }
+}
+
+/* Full-height responsive chat layout */
+.chat-layout {
+    height: calc(100vh - 220px);
+    min-height: 400px;
+}
+
+/* Papers modal animation */
+#papers-modal.flex {
+    animation: fadeIn 0.15s ease;
+}
+
+#papers-modal .w-full {
+    animation: slideUp 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* Print styles */
+@media print {
+
+    header,
+    footer,
+    nav,
+    button {
+        display: none;
+    }
+
+    .paper-card {
+        page-break-inside: avoid;
+    }
+}

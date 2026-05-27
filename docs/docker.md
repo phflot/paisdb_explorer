@@ -1,0 +1,374 @@
+# Docker and Podman Setup Guide
+
+This guide explains how to run Abstracts Explorer using containers with Podman (recommended) or Docker.
+
+**Note:** The container images are production-optimized and use pre-built static vendor files (CSS/JS libraries). Node.js is **not required** for production containers - it's only needed for local development if you want to rebuild vendor files.
+
+## Rootless Containers with Podman Quadlets (recommended systemd-native setup)
+
+The `systemd/` directory contains Podman
+[quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html)
+files that integrate the container stack directly with systemd.  Quadlets are
+the modern, daemonless alternative to podman-compose: each container, volume,
+and network is a native systemd unit, giving you the full `systemctl` and
+`journalctl` experience with no compose wrapper needed.
+
+Two TLS variants are provided:
+
+| Variant             | Reverse proxy        | Certificate source                                       |
+| ------------------- | -------------------- | -------------------------------------------------------- |
+| **caddy** (default) | Caddy                | Automatic Let's Encrypt (recommended for public domains) |
+| **nginx**           | nginx (unprivileged) | Your own certificate files (`cert.pem` / `key.pem`)      |
+
+### Architecture
+
+```{mermaid}
+flowchart TD
+    Internet["Internet"]
+    socket["systemd socket<br/>:80 / :443 (root)"]
+    proxy["systemd-socket-proxyd"]
+    rproxy["nginx or Caddy<br/>(rootless Podman)"]
+    app["abstracts-explorer:5000"]
+    pg["PostgreSQL"]
+    chroma["ChromaDB"]
+
+    Internet --> socket
+    socket --> proxy
+    proxy -->|"127.0.0.1:8080"| rproxy
+    rproxy --> app
+    app --> pg
+    app --> chroma
+```
+
+Privileged ports 80/443 are held by a system-level systemd socket.
+All containers run rootless under your normal user account — no `sysctl`
+changes, no Docker daemon, no root containers.
+
+Sensitive values (API tokens, database password) are stored as
+[Podman secrets](https://docs.podman.io/en/latest/markdown/podman-secret-create.1.html)
+and injected at runtime — they never appear in plain text in unit files or
+environment files.
+
+Container logs are automatically deleted after 7 days to comply with GDPR.
+The install script sets up a daily systemd user timer (`abstracts-log-cleanup.timer`)
+that vacuums journal entries older than 7 days.
+
+### Automated install
+
+An install script automates the full setup:
+
+```bash
+# Caddy variant (automatic Let's Encrypt — default):
+curl -fsSL https://raw.githubusercontent.com/thawn/abstracts-explorer/main/scripts/install-podman.sh | bash
+
+# nginx variant (existing SSL certificate):
+curl -fsSL https://raw.githubusercontent.com/thawn/abstracts-explorer/main/scripts/install-podman.sh \
+  | bash -s -- --variant nginx
+```
+
+The script:
+1. Downloads all quadlet, configuration, and environment files
+2. Installs the system socket units (requires `sudo`)
+3. Enables lingering for your user
+4. Generates a secure database password and stores it as a Podman secret
+   (skipped if the secret already exists)
+5. Prints the remaining manual steps
+
+After the script finishes, you only need to:
+
+1. **Create the LLM backend API token secret:**
+
+   ```bash
+   printf '%s' 'YOUR_BLABLADOR_TOKEN' | podman secret create llm-backend-auth-token -
+   ```
+
+2. **Edit the environment file** (`~/abstracts-explorer/abstracts-explorer.env`) to
+   adjust model names, LLM backend URL, and other settings.
+
+3. **Set up TLS:**
+   - **Caddy:** edit `~/abstracts-explorer/caddy/Caddyfile` — replace
+     `abstracts.example.com` with your domain and `your@email.com` with
+     your email address.
+
+   - **nginx:** place your certificate and key in `~/abstracts-explorer/certs/`
+
+     ```bash
+     cp /path/to/cert.pem ~/abstracts-explorer/certs/
+     cp /path/to/key.pem  ~/abstracts-explorer/certs/
+     ```
+
+4. **Start all services:**
+
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user start abstracts-postgres abstracts-chromadb abstracts-explorer
+   # Caddy variant:
+   systemctl --user start abstracts-caddy
+   # nginx variant:
+   systemctl --user start abstracts-nginx
+   ```
+
+### Configuration
+
+All non-secret settings live in a single environment file:
+
+```
+~/abstracts-explorer/abstracts-explorer.env
+```
+
+Edit this file to change the LLM backend URL, model names, log level, RAG
+parameters, and other options.  Changes take effect after restarting the
+abstracts-explorer service:
+
+```bash
+systemctl --user restart abstracts-explorer
+```
+
+### Managing secrets
+
+| Secret                   | Required | Purpose                                                         |
+| ------------------------ | -------- | --------------------------------------------------------------- |
+| `postgres-password`      | Yes      | PostgreSQL database password (auto-generated by install script) |
+| `llm-backend-auth-token` | Yes      | Blablador or other LLM backend API key                          |
+| `github-token`           | No       | GitHub token for the OCI registry feature                       |
+
+Create or update a secret:
+
+```bash
+printf '%s' 'NEW_VALUE' | podman secret create --replace SECRET_NAME -
+systemctl --user restart abstracts-explorer  # pick up the new value
+```
+
+**GitHub token (optional):** To enable OCI registry downloads, create the
+secret and then uncomment the `Secret=github-token` line in
+`~/.config/containers/systemd/abstracts-explorer.container`:
+
+```bash
+printf '%s' 'YOUR_GITHUB_TOKEN' | podman secret create github-token -
+# Then edit ~/.config/containers/systemd/abstracts-explorer.container
+# and uncomment:  Secret=github-token,type=env,target=GITHUB_TOKEN
+systemctl --user daemon-reload
+systemctl --user restart abstracts-explorer
+```
+
+### Checking status and logs
+
+```bash
+# Status of all services
+systemctl --user status 'abstracts-*'
+
+# Follow logs for a specific container
+journalctl --user -u abstracts-explorer -f
+
+# Follow logs for all containers
+journalctl --user -u 'abstracts-*' -f
+```
+
+Log entries older than 7 days are vacuumed automatically by the
+`abstracts-log-cleanup.timer` user timer installed by the install script.
+To check the timer's status:
+
+```bash
+systemctl --user status abstracts-log-cleanup.timer
+```
+
+### Updating containers
+
+An update script pulls the latest images and restarts all services:
+
+```bash
+~/abstracts-explorer/update-podman.sh
+```
+
+Or download and run it directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thawn/abstracts-explorer/main/scripts/update-podman.sh | bash
+```
+
+### Download data
+
+The final step is to populate the database. There are three options:
+
+#### Get pre-computed data from the registry
+
+After the services are running, use the CLI to [download pre-computed data from the registry](registry.md):
+
+```bash
+podman exec abstracts-explorer \
+  abstracts-explorer registry download
+```
+
+#### Run the full pipeline inside the container
+
+Alternatively, you can run the full [download and embedding pipeline](cli_reference.md) inside the container:
+
+```bash
+podman exec abstracts-explorer \
+  abstracts-explorer download
+podman exec abstracts-explorer \
+  abstracts-explorer create-embeddings
+podman exec abstracts-explorer \
+  abstracts-explorer clustering pre-compute
+```
+
+#### Migrate existing data
+
+If you have an existing Docker Compose deployment and want to migrate to the
+Podman quadlet setup, execute the migration script in the directory of your existing `docker-compose.yml`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thawn/abstracts-explorer/main/scripts/migrate-to-podman.sh | bash
+```
+
+The script copies data from `./data`, `./chroma`, and the `./postgres` data
+directories into the new Podman named volumes and sets the correct ownership and
+permissions.  It creates a timestamped backup of the existing data before
+migrating.
+
+## Available Images
+
+Pre-built container images are available from:
+- **GitHub Container Registry**: `ghcr.io/thawn/abstracts-explorer:latest`
+- **Docker Hub** (releases only): `thawn/abstracts-explorer:latest`
+
+Available tags (following container best practices):
+- `latest` - Latest stable release only (never points to branch builds)
+- `develop` - Latest development branch build
+- `v*.*.*` - Specific version releases (e.g., `v0.1.0`)
+- `v*.*` - Major.minor version (e.g., `v0.1`)
+- `v*` - Major version (e.g., `v0`)
+- `sha-*` - Specific commit SHA for traceability (e.g., `sha-5f8567d`)
+- `pr-*` - Pull request builds for testing (e.g., `pr-40`)
+
+## Security hardening
+
+Both nginx and caddy configurations include the following security hardening out of the box:
+
+| Setting                             | Value / Behaviour                                                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------- |
+| **TLS protocol**                    | TLS 1.3 only (TLS 1.2 disabled; see comments in config to re-enable for legacy clients) |
+| **TLS 1.2 ciphers** (if re-enabled) | ECDHE + AES-GCM + ChaCha20-Poly1305 only; weak/export ciphers excluded                  |
+| **SSL session tickets**             | Disabled (`ssl_session_tickets off`) to preserve forward secrecy                        |
+| **SSL session cache**               | Shared 10 MB cache, 1 day timeout                                                       |
+| **OCSP stapling**                   | Enabled — reduces handshake latency and supports revocation checking                    |
+| **Server version**                  | Hidden (`server_tokens off`)                                                            |
+| **HSTS**                            | `max-age=63072000; includeSubDomains` (2 years)                                         |
+| **X-Content-Type-Options**          | `nosniff`                                                                               |
+| **X-Frame-Options**                 | `SAMEORIGIN`                                                                            |
+| **Referrer-Policy**                 | `strict-origin-when-cross-origin`                                                       |
+| **X-XSS-Protection**                | `1; mode=block`                                                                         |
+| **X-Powered-By**                    | Stripped from upstream responses                                                        |
+
+> **OCSP stapling note (Option 1 — existing cert):** OCSP stapling requires a certificate
+> issued by a public CA and the full certificate chain in `cert.pem`.  If you are using a
+> self-signed certificate, remove the `ssl_stapling`, `ssl_stapling_verify`,
+> `ssl_trusted_certificate`, `resolver`, and `resolver_timeout` lines from
+> `nginx/nginx.conf`.
+
+## Testing Pull Requests
+
+To test changes from a pull request before they're merged:
+
+1. **Find the PR number** (e.g., PR #40)
+2. **Update ~/.config/containers/systemd/abstracts-explorer.service** to use the PR image:
+
+   ```ini
+   [Service]
+   # Change this line to test the PR image
+   Image=ghcr.io/thawn/abstracts-explorer:pr-40
+                                          ^^^^^
+   ```
+
+## Data Persistence
+
+All data is stored in named volumes:
+- `abstracts-data` - Application data directory
+- `abstracts-chromadb-data` - ChromaDB vector embeddings
+- `abstracts-postgres-data` - PostgreSQL database
+
+### Backup
+```bash
+# Stop services to ensure data consistency
+systemctl --user stop abstracts-explorer abstracts-postgres abstracts-chromadb
+
+# Backup PostgreSQL database
+podman exec abstracts-postgres pg_dump -U abstracts abstracts > backup.sql
+
+# Backup ChromaDB data
+cp -a ~/local/share/containers/storage/volumes/abstracts-chromadb-data/_data/chroma ./chroma-backup
+
+# Restart services
+systemctl --user start abstracts-postgres abstracts-chromadb abstracts-explorer
+```
+
+### Restore
+
+```bash
+# Stop services before restoring
+systemctl --user stop abstracts-explorer abstracts-postgres abstracts-chromadb
+
+# Restore PostgreSQL database
+cat backup.sql | podman-compose exec -T abstracts-postgres psql -U abstracts
+
+# Restore ChromaDB data
+cp -a ./chroma-backup/* ~/local/share/containers/storage/volumes/abstracts-chromadb-data/_data/chroma/
+
+# Restart services
+systemctl --user start abstracts-postgres abstracts-chromadb abstracts-explorer
+```
+
+## Traditional Docker Compose Setup (deprecated)
+
+This setup uses a single `docker-compose.yml` file to run all services.  It is provided mainly as a reference and for users who prefer the Docker Compose workflow, but the Podman quadlet setup is recommended for better integration with systemd and improved security.
+
+### 1. Create .env File
+
+First create a `.env` file with your [blablador token](https://sdlaml.pages.jsc.fz-juelich.de/ai/guides/blablador_api_access/):
+
+```bash
+LLM_BACKEND_AUTH_TOKEN=your_blablador_token_here
+```
+
+### 2. Download the compose file
+
+```bash
+curl -L https://github.com/thawn/abstracts-explorer/raw/main/docker-compose.yml -o docker-compose.yml
+```
+
+> **HTTPS certificates required** — the default `docker-compose.yml` uses nginx with
+> your own certificate files.  See [HTTPS / SSL Setup](#https--ssl-setup) below for
+> how to place your certificate (Option 1) or use Let's Encrypt (Option 2).
+
+### 3. Start Services
+
+```bash
+# Podman
+podman-compose up -d
+```
+
+### HTTPS / SSL Setup
+
+Both Docker Compose files include an **nginx reverse proxy** that handles SSL termination.
+Waitress (the application server) continues to serve plain HTTP on port 5000 inside the
+container network while nginx exposes the service securely on port 443.
+
+Choose the approach that matches your situation:
+
+| Approach                 | Compose file                     | When to use                                                                          |
+| ------------------------ | -------------------------------- | ------------------------------------------------------------------------------------ |
+| **Let's Encrypt**        | `docker-compose.letsencrypt.yml` | You need a free, automatically renewed certificate for a public domain               |
+| **Existing certificate** | `docker-compose.yml`             | You already have a valid certificate (e.g. from your institution or a wildcard cert) |
+
+Fo the detailed setup instructions, refer to popular guides on setting up nginx with Let's Encrypt or your existing certificate.  The nginx configuration files in the `nginx/` directory are pre-configured for secure TLS settings and can be used as a reference for your own setup.
+
+## Further Reading
+
+- [Podman Documentation](https://docs.podman.io/)
+- [Main README](https://github.com/thawn/abstracts-explorer/blob/main/README.md)
+- [Configuration Guide](configuration.md)
+
+## Support
+
+- 🐛 [Report issues](https://github.com/thawn/abstracts-explorer/issues)
+- 💬 [Discussions](https://github.com/thawn/abstracts-explorer/discussions)

@@ -1,0 +1,50 @@
+name: Lint
+
+on:
+    push:
+        branches: [main, develop]
+        paths:
+            - 'src/**/*.py'
+            - 'tests/**/*.py'
+            - 'pyproject.toml'
+            - 'uv.lock'
+            - '.github/workflows/lint.yml'
+    pull_request:
+        branches: [main, develop]
+        paths:
+            - 'src/**/*.py'
+            - 'tests/**/*.py'
+            - 'pyproject.toml'
+            - 'uv.lock'
+            - '.github/workflows/lint.yml'
+    workflow_dispatch:
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+              with:
+                  version: "latest"
+                  enable-cache: true
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+
+            - name: Install dependencies
+              run: |
+                  uv pip install --system ruff mypy types-requests
+
+            - name: Lint with ruff
+              run: |
+                  ruff check src/ tests/ --output-format=github
+
+            - name: Type check with mypy
+              run: |
+                  mypy src/ --ignore-missing-imports

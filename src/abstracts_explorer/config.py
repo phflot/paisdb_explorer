@@ -1,0 +1,532 @@
+"""
+Configuration management for neurips-abstracts package.
+
+This module loads configuration from environment variables and .env files.
+Uses only standard library (no python-dotenv dependency required).
+"""
+
+import os
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+
+def load_env_file(env_path: Optional[Path] = None) -> Dict[str, str]:
+    """
+    Load environment variables from a .env file.
+
+    Uses a simple parser that handles basic .env file format without
+    requiring external dependencies.
+
+    Parameters
+    ----------
+    env_path : Path, optional
+        Path to .env file. If None, looks for .env in current directory
+        and parent directories up to the package root.
+
+    Returns
+    -------
+    dict
+        Dictionary of environment variables loaded from file.
+
+    Examples
+    --------
+    >>> env_vars = load_env_file(Path(".env"))
+    >>> print(env_vars.get("CHAT_MODEL"))
+    """
+    if env_path is None:
+        # Look for .env file starting from current directory
+        current = Path.cwd()
+        for _ in range(5):  # Check up to 5 parent directories
+            env_file = current / ".env"
+            if env_file.exists():
+                env_path = env_file
+                break
+            current = current.parent
+
+    if env_path is None or not env_path.exists():
+        return {}
+
+    env_vars = {}
+    try:
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+
+                # Parse KEY=VALUE format
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip()
+
+                    # Remove quotes if present
+                    if value and value[0] in ('"', "'") and value[-1] == value[0]:
+                        value = value[1:-1]
+
+                    env_vars[key] = value
+    except Exception:
+        # Silently ignore errors reading .env file
+        pass
+
+    return env_vars
+
+
+class Config:
+    """
+    Configuration manager for neurips-abstracts package.
+
+    Loads configuration from environment variables with fallback to defaults.
+    Automatically loads from .env file if present.
+
+    Attributes
+    ----------
+    data_dir : str
+        Base directory for data files (databases, embeddings).
+    chat_model : str
+        Name of the language model for chat/RAG.
+    embedding_model : str
+        Name of the embedding model.
+    llm_backend_url : str
+        URL for OpenAI-compatible API endpoint.
+    llm_backend_auth_token : str
+        Authentication token for LLM backend (if required).
+    embedding_db : str
+        ChromaDB configuration - can be either a URL (e.g., "http://chromadb:8000")
+        or a file path (e.g., "chroma_db" or "/path/to/chroma_db").
+    paper_db_path : str
+        Path to SQLite paper database.
+    collection_name : str
+        Name of the ChromaDB collection.
+    max_context_papers : int
+        Default number of papers for RAG context.
+    chat_temperature : float
+        Default temperature for chat generation.
+    chat_max_tokens : int
+        Default max tokens for chat responses.
+    enable_query_rewriting : bool
+        Whether to enable query rewriting for better semantic search.
+    query_similarity_threshold : float
+        Similarity threshold for determining when to retrieve new papers (0.0-1.0).
+    database_url : str
+        SQLAlchemy database URL (supports SQLite, PostgreSQL, etc.).
+        Automatically constructed from PAPER_DB config variable.
+    log_level : str
+        Logging level from environment (WARNING, INFO, DEBUG). Empty string if not set.
+        Used by setup_logging() to set the default log level when verbosity flags are not used.
+    proxy_x_for : int
+        Number of trusted ``X-Forwarded-For`` proxy hops (ProxyFix).
+        Set to 0 to disable; set to the number of reverse-proxy layers in front of the app.
+    proxy_x_proto : int
+        Number of trusted ``X-Forwarded-Proto`` proxy hops (ProxyFix).
+    proxy_x_host : int
+        Number of trusted ``X-Forwarded-Host`` proxy hops (ProxyFix).
+    proxy_x_prefix : int
+        Number of trusted ``X-Forwarded-Prefix`` proxy hops (ProxyFix).
+    imprint_link : str
+        Optional URL for an imprint/legal notice page. If set, a link is shown in the web UI footer.
+        Empty string by default (no imprint link shown).
+    requests_per_minute : int
+        Maximum number of embedding API requests per minute (default: 60).
+        Set to 0 to disable rate limiting.
+
+    Examples
+    --------
+    >>> config = Config()
+    >>> print(config.chat_model)
+    'diffbot-small-xl-2508'
+    >>> config.llm_backend_url
+    'http://localhost:1234'
+    >>> # Using DATABASE_URL for PostgreSQL
+    >>> config.database_url
+    'postgresql://user:password@localhost/abstracts'
+    """
+
+    def __init__(self, env_path: Optional[Path] = None):
+        """
+        Initialize configuration.
+
+        Parameters
+        ----------
+        env_path : Path, optional
+            Path to .env file. If None, searches for .env automatically.
+        """
+        # Load .env file if it exists
+        env_vars = load_env_file(env_path)
+
+        # Merge with actual environment variables (environment variables take precedence)
+        self._env = {**env_vars, **os.environ}
+
+        # Load all configuration values
+        self._load_config()
+
+    def _load_config(self):
+        """Load configuration from environment variables."""
+        # Data Directory (base directory for all data files)
+        self.data_dir = self._get_env("DATA_DIR", default="data")
+
+        # Chat/Language Model Settings
+        self.chat_model = self._get_env("CHAT_MODEL", default="diffbot-small-xl-2508")
+        self.chat_temperature = self._get_env_float("CHAT_TEMPERATURE", default=0.7)
+        self.chat_max_tokens = self._get_env_int("CHAT_MAX_TOKENS", default=1000)
+
+        # Embedding Model Settings
+        self.embedding_model = self._get_env("EMBEDDING_MODEL", default="text-embedding-qwen3-embedding-4b")
+
+        # LLM Backend Configuration
+        self.llm_backend_url = self._get_env("LLM_BACKEND_URL", default="http://localhost:1234")
+        self.llm_backend_auth_token = self._get_env("LLM_BACKEND_AUTH_TOKEN", default="")
+
+        # Database Configuration
+        # PAPER_DB can be either:
+        # 1. A PostgreSQL URL (e.g., "postgresql://user:pass@host/db")
+        # 2. A file path for SQLite (e.g., "abstracts.db" or "/path/to/abstracts.db")
+        paper_db = self._get_env("PAPER_DB", default="abstracts.db")
+
+        # Support Podman/Docker deployments where the database password is
+        # injected as a separate secret (ABSTRACTS_DB_PASSWORD) rather than
+        # embedded in PAPER_DB.  If PAPER_DB is still a plain file path (i.e.
+        # no URL scheme) and all PostgreSQL component variables are present,
+        # assemble the full connection URL automatically.
+        #
+        # Additionally, if POSTGRES_HOST is explicitly set in the process
+        # environment (i.e., injected at runtime via a quadlet EnvironmentFile
+        # or similar mechanism, rather than read from a baked-in .env file),
+        # it takes precedence over any PAPER_DB value from a .env file.  This
+        # allows Podman quadlet deployments to override the default
+        # PAPER_DB embedded in the container image via individual POSTGRES_*
+        # variables without having to re-specify the full connection URL.
+        postgres_host_in_env = "POSTGRES_HOST" in os.environ
+        if "://" not in paper_db or postgres_host_in_env:
+            pg_user = self._get_env("POSTGRES_USER", default="")
+            pg_password = self._get_env("ABSTRACTS_DB_PASSWORD", default="")
+            pg_host = self._get_env("POSTGRES_HOST", default="")
+            pg_port = self._get_env("POSTGRES_PORT", default="5432")
+            pg_db = self._get_env("POSTGRES_DB", default="")
+            if pg_user and pg_password and pg_host and pg_db:
+                paper_db = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
+
+        if paper_db.startswith("postgresql://") or paper_db.startswith("sqlite://"):
+            # Full database URL provided
+            self.database_url = paper_db
+        elif "://" in paper_db:
+            # Other database URL (mysql, etc.)
+            self.database_url = paper_db
+        else:
+            # File path - treat as SQLite
+            paper_db_path = self._resolve_path(paper_db)
+            self.database_url = f"sqlite:///{paper_db_path}"
+
+        # Embedding database configuration
+        # EMBEDDING_DB can be either a URL (e.g., "http://chromadb:8000")
+        # or a file path (e.g., "chroma_db" or "/path/to/chroma_db")
+        embedding_db = self._get_env("EMBEDDING_DB", default="chroma_db")
+
+        if embedding_db.startswith("http://") or embedding_db.startswith("https://"):
+            # URL provided - use as-is
+            self.embedding_db = embedding_db
+        else:
+            # File path - resolve relative to data_dir
+            self.embedding_db = self._resolve_path(embedding_db)
+
+        # Collection Settings
+        self.collection_name = self._get_env("COLLECTION_NAME", default="papers")
+
+        # RAG Settings
+        self.max_context_papers = self._get_env_int("MAX_CONTEXT_PAPERS", default=5)
+
+        # Query Rewriting Settings
+        self.enable_query_rewriting = self._get_env_bool("ENABLE_QUERY_REWRITING", default=True)
+        self.query_similarity_threshold = self._get_env_float("QUERY_SIMILARITY_THRESHOLD", default=0.7)
+
+        # Web UI Default Filters
+        self.default_conference = self._get_env("DEFAULT_CONFERENCE", default="ML4PS@NeurIPS")
+        self.default_year = self._get_env_int("DEFAULT_YEAR", default=0)
+
+        # Logging Configuration
+        self.log_level = self._get_env("LOG_LEVEL", default="").upper()
+
+        # Reverse-proxy hop counts for werkzeug ProxyFix.
+        # Set to 0 to disable; set to the number of reverse-proxy layers in front of
+        # the app (default 1 matches the single nginx layer in docker-compose.yml).
+        self.proxy_x_for = self._get_env_int("PROXY_X_FOR", default=1)
+        self.proxy_x_proto = self._get_env_int("PROXY_X_PROTO", default=1)
+        self.proxy_x_host = self._get_env_int("PROXY_X_HOST", default=1)
+        self.proxy_x_prefix = self._get_env_int("PROXY_X_PREFIX", default=1)
+
+        # Web UI Footer Configuration
+        # Optional imprint/legal notice URL shown in the footer (empty = not shown)
+        self.imprint_link = self._get_env("IMPRINT_LINK", default="")
+
+        # Embedding API Rate Limiting
+        # Maximum number of API requests per minute (0 = no limit)
+        self.requests_per_minute = self._get_env_int("REQUESTS_PER_MINUTE", default=60)
+
+        # Registry Settings
+        # GitHub Personal Access Token for registry operations
+        self.github_token = self._get_env("GITHUB_TOKEN", default="")
+        # OCI repository for data artifacts (e.g., 'ghcr.io/thawn/abstracts-data')
+        self.registry_repository = self._get_env("REGISTRY_REPOSITORY", default="")
+
+    def _get_env(self, key: str, default: str = "") -> str:
+        """
+        Get string environment variable.
+
+        Parameters
+        ----------
+        key : str
+            Environment variable name.
+        default : str
+            Default value if not set.
+
+        Returns
+        -------
+        str
+            Environment variable value or default.
+        """
+        return self._env.get(key, default)
+
+    def _get_env_int(self, key: str, default: int = 0) -> int:
+        """
+        Get integer environment variable.
+
+        Parameters
+        ----------
+        key : str
+            Environment variable name.
+        default : int
+            Default value if not set or invalid.
+
+        Returns
+        -------
+        int
+            Environment variable value as integer or default.
+        """
+        value = self._env.get(key, "")
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    def _get_env_float(self, key: str, default: float = 0.0) -> float:
+        """
+        Get float environment variable.
+
+        Parameters
+        ----------
+        key : str
+            Environment variable name.
+        default : float
+            Default value if not set or invalid.
+
+        Returns
+        -------
+        float
+            Environment variable value as float or default.
+        """
+        value = self._env.get(key, "")
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
+    def _get_env_bool(self, key: str, default: bool = False) -> bool:
+        """
+        Get boolean environment variable.
+
+        Parameters
+        ----------
+        key : str
+            Environment variable name.
+        default : bool
+            Default value if not set or invalid.
+
+        Returns
+        -------
+        bool
+            Environment variable value as boolean or default.
+        """
+        value = self._env.get(key, "").lower()
+        if value in ("true", "1", "yes", "on"):
+            return True
+        elif value in ("false", "0", "no", "off"):
+            return False
+        return default
+
+    def _resolve_path(self, path: str) -> str:
+        """
+        Resolve a path relative to the data directory.
+
+        If the path is absolute, returns it unchanged.
+        Otherwise, resolves it relative to data_dir.
+
+        Parameters
+        ----------
+        path : str
+            Path to resolve.
+
+        Returns
+        -------
+        str
+            Resolved path (relative to data_dir if not absolute).
+        """
+        path_obj = Path(path)
+        if path_obj.is_absolute():
+            # Return absolute path as string (expanduser to handle ~)
+            return str(path_obj.expanduser().absolute())
+
+        # Resolve relative to data_dir and make absolute
+        return str((Path(self.data_dir) / path).absolute())
+
+    def get_supported_env_vars(self) -> set:
+        """
+        Get a set of all supported environment variable names.
+
+        Returns
+        -------
+        set
+            Set of supported environment variable names.
+
+        Examples
+        --------
+        >>> config = Config()
+        >>> env_vars = config.supported_env_vars()
+        >>> print("CHAT_MODEL" in env_vars)
+        True
+        """
+        return {
+            "DATA_DIR",
+            "CHAT_MODEL",
+            "CHAT_TEMPERATURE",
+            "CHAT_MAX_TOKENS",
+            "EMBEDDING_MODEL",
+            "LLM_BACKEND_URL",
+            "LLM_BACKEND_AUTH_TOKEN",
+            "PAPER_DB",
+            "POSTGRES_USER",
+            "POSTGRES_HOST",
+            "POSTGRES_PORT",
+            "POSTGRES_DB",
+            "ABSTRACTS_DB_PASSWORD",
+            "EMBEDDING_DB",
+            "COLLECTION_NAME",
+            "MAX_CONTEXT_PAPERS",
+            "ENABLE_QUERY_REWRITING",
+            "QUERY_SIMILARITY_THRESHOLD",
+            "DEFAULT_CONFERENCE",
+            "DEFAULT_YEAR",
+            "LOG_LEVEL",
+            "PROXY_X_FOR",
+            "PROXY_X_PROTO",
+            "PROXY_X_HOST",
+            "PROXY_X_PREFIX",
+            "IMPRINT_LINK",
+            "REQUESTS_PER_MINUTE",
+            "GITHUB_TOKEN",
+            "REGISTRY_REPOSITORY",
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert configuration to dictionary.
+
+        Returns
+        -------
+        dict
+            Dictionary of all configuration values.
+
+        Examples
+        --------
+        >>> config = Config()
+        >>> config_dict = config.to_dict()
+        >>> print(config_dict["chat_model"])
+        """
+        return {
+            "data_dir": self.data_dir,
+            "chat_model": self.chat_model,
+            "chat_temperature": self.chat_temperature,
+            "chat_max_tokens": self.chat_max_tokens,
+            "embedding_model": self.embedding_model,
+            "llm_backend_url": self.llm_backend_url,
+            "llm_backend_auth_token": "***" if self.llm_backend_auth_token else "",
+            "embedding_db": self.embedding_db,
+            "database_url": self._mask_database_url(self.database_url),
+            "collection_name": self.collection_name,
+            "max_context_papers": self.max_context_papers,
+        }
+
+    def _mask_database_url(self, url: str) -> str:
+        """
+        Mask password in database URL for display.
+
+        Parameters
+        ----------
+        url : str
+            Database URL that may contain password.
+
+        Returns
+        -------
+        str
+            URL with password masked.
+        """
+        if not url or "://" not in url:
+            return url
+
+        # For URLs with password (e.g., postgresql://user:password@host/db)
+        # Mask the password part
+        if "@" in url and ":" in url.split("://")[1].split("@")[0]:
+            parts = url.split("://")
+            protocol = parts[0]
+            rest = parts[1]
+            # Split at @ to separate credentials from host
+            creds_and_host = rest.split("@")
+            if len(creds_and_host) == 2:
+                creds = creds_and_host[0]
+                host = creds_and_host[1]
+                # Mask password in credentials
+                if ":" in creds:
+                    user = creds.split(":")[0]
+                    return f"{protocol}://{user}:***@{host}"
+        return url
+
+    def __repr__(self) -> str:
+        """String representation of configuration."""
+        items = []
+        for key, value in self.to_dict().items():
+            items.append(f"{key}={value}")
+        return f"Config({', '.join(items)})"
+
+
+# Global configuration instance
+_config: Optional[Config] = None
+
+
+def get_config(reload: bool = False, env_path: Optional[Path] = None) -> Config:
+    """
+    Get global configuration instance.
+
+    Parameters
+    ----------
+    reload : bool, optional
+        Force reload configuration from environment, by default False
+    env_path : Path, optional
+        Path to .env file. If provided, loads configuration from this file.
+        Useful for testing to ensure consistent configuration.
+
+    Returns
+    -------
+    Config
+        Global configuration instance.
+
+    Examples
+    --------
+    >>> config = get_config()
+    >>> print(config.chat_model)
+    >>> # In tests, use .env.tests for consistent values
+    >>> config = get_config(reload=True, env_path=Path(".env.tests"))
+    """
+    global _config
+    if _config is None or reload:
+        _config = Config(env_path=env_path)
+    return _config

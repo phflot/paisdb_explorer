@@ -1,0 +1,13 @@
+# Ignore build directory
+_build/
+_static/
+
+# Sphinx generated files
+*.doctree
+environment.pickle
+*.inv
+
+# Python cache
+__pycache__/
+*.pyc
+_build/

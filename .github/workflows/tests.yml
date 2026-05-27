@@ -1,0 +1,66 @@
+name: Tests
+
+on:
+    push:
+        branches: [main, develop]
+        paths:
+            - 'src/**/*.py'
+            - 'tests/**/*.py'
+            - 'pyproject.toml'
+            - 'uv.lock'
+            - '.github/workflows/tests.yml'
+            - '.github/scripts/setup-ci.sh'
+            - '.github/scripts/setup-ci.ps1'
+            - '.github/actions/setup-environment/**'
+    pull_request:
+        branches: [main, develop]
+        paths:
+            - 'src/**/*.py'
+            - 'tests/**/*.py'
+            - 'pyproject.toml'
+            - 'uv.lock'
+            - '.github/workflows/tests.yml'
+            - '.github/scripts/setup-ci.sh'
+            - '.github/scripts/setup-ci.ps1'
+            - '.github/actions/setup-environment/**'
+    workflow_dispatch:
+
+jobs:
+    test:
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+                python-version: ["3.11", "3.12", "3.13"]
+
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0 # Needed for hatch-vcs to determine version
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+              with:
+                  version: "latest"
+                  enable-cache: true
+
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v6
+              with:
+                  python-version: ${{ matrix.python-version }}
+
+            - name: Setup environment (Unix)
+              if: runner.os != 'Windows'
+              run: |
+                  chmod +x .github/scripts/setup-ci.sh
+                  .github/scripts/setup-ci.sh --skip-node
+
+            - name: Setup environment (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  .github/scripts/setup-ci.ps1 --skip-node
+
+            - name: Run tests (excluding slow and e2e tests)
+              run: |
+                  uv run pytest tests/ -v --cov=abstracts_explorer --cov-report=xml --cov-report=term-missing -m "not slow and not e2e"

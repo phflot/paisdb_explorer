@@ -1,0 +1,28 @@
+[Unit]
+Description=ChromaDB vector database for Abstracts Explorer
+After=abstracts-chromadb-data-volume.service
+Requires=abstracts-chromadb-data-volume.service
+
+[Container]
+Image=docker.io/chromadb/chroma:latest
+ContainerName=abstracts-chromadb
+Network=abstracts.network
+
+Volume=abstracts-chromadb-data.volume:/data
+
+Environment=IS_PERSISTENT=TRUE
+Environment=ANONYMIZED_TELEMETRY=FALSE
+
+# the health check is using apt-helper until curl becomes available - see https://github.com/chroma-core/chroma/pull/6856 . Then we can switch to the recommended command in the chromadb docs: curl -sf http://localhost:8000/api/v2/heartbeat
+HealthCmd=/usr/lib/apt/apt-helper download-file http://localhost:8000/api/v2/heartbeat /tmp/health
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=5
+HealthStartPeriod=15s
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

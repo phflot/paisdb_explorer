@@ -1,0 +1,85 @@
+name: "Copilot Setup Steps"
+
+# Automatically run the setup steps when they are changed to allow for easy validation, and
+# allow manual testing through the repository's "Actions" tab
+on:
+    workflow_dispatch:
+    push:
+        paths:
+            - .github/workflows/copilot-setup-steps.yml
+    pull_request:
+        paths:
+            - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+    # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+    copilot-setup-steps:
+        runs-on: ubuntu-latest
+
+        # Set the permissions to the lowest permissions possible needed for your steps.
+    # Copilot will be given its own token for its operations.
+        permissions:
+      # If you want to clone the repository as part of your setup steps, for example to install dependencies, you'll need the `contents: read` permission. If you don't clone the repository in your setup steps, Copilot will do this for you automatically after the steps complete.
+            contents: read
+            packages: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0 # Needed for hatch-vcs to determine version
+
+            - name: Setup Abstracts Explorer Environment
+              uses: ./.github/actions/setup-environment
+              with:
+                  python-version: "3.12"
+                  install-node: "true"
+                  uv-cache: "true"
+
+            - name: Verify Python environment
+              run: |
+                  uv run python --version
+                  uv run python -c "import abstracts_explorer; print(f'Package version: {abstracts_explorer.__version__}')"
+
+            - name: Verify Node.js environment
+              run: |
+                  node --version
+                  npm --version
+                  npm list --depth=0
+
+            - name: Install Chrome for E2E tests
+              uses: browser-actions/setup-chrome@v1
+              with:
+                  chrome-version: stable
+
+            - name: Run quick tests
+              run: |
+                  uv run pytest tests/test_cli.py::TestCLI::test_main_no_command
+
+            - name: Verify linting tools and pre-commit hooks
+              run: |
+                  echo "Verifying linting tools are installed..."
+                  uv pip install --system ruff mypy types-requests
+                  command -v ruff && echo "✓ ruff is available"
+                  command -v mypy && echo "✓ mypy is available"
+                  echo ""
+                  echo "Verifying pre-commit hooks are installed..."
+                  if [ -x .git/hooks/pre-commit ]; then
+                    echo "✓ pre-commit hook is installed and executable"
+                  else
+                    echo "✗ pre-commit hook is not installed or not executable"
+                    exit 1
+                  fi
+
+            - name: Environment setup summary
+              if: always()
+              run: |
+                  echo "========================================="
+                  echo "Environment Setup Summary"
+                  echo "========================================="
+                  echo "Python: $(python3 --version)"
+                  echo "uv: $(uv --version)"
+                  echo "Node.js: $(node --version)"
+                  echo "npm: $(npm --version)"
+                  echo "Virtual environment: $(.venv/bin/python --version)"
+                  echo "========================================="

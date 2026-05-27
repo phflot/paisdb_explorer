@@ -33,11 +33,16 @@ Database initialization does not require model settings:
 abstracts-explorer pais init-db
 ```
 
-Before running candidate screening, define the local benchmark-screen model and the hosted enrichment/extraction models in `.env` or the process environment:
+Before running candidate screening, define the benchmark screen as local Mistral and the hosted enrichment/extraction models separately. The screen stays benchmark-compatible; Server 2 is only used after a positive or uncertain screen.
 
 ```bash
-PAIS_SCREEN_MODEL=<local-screen-model>
-PAIS_SCREEN_BASE_URL=<local-openai-compatible-base-url>
+PAIS_SCREEN_BACKEND=hf_transformers
+PAIS_SCREEN_MODEL=mistralai/Mistral-Small-Instruct-2409
+PAIS_SCREEN_REVISION=4600506f6b13c7ef89e61a54263f4c9bf483de30
+PAIS_SCREEN_HF_HOME=/share/runs/2026/04-23-paisdb-phflot/paisdb_local/.cache
+PAIS_SCREEN_LOCAL_FILES_ONLY=true
+PAIS_SCREEN_CUDA_VISIBLE_DEVICES=0
+PAIS_SCREEN_MAX_NEW_TOKENS=300
 
 PAIS_EVIDENCE_BRIEF_MODEL=<hosted-brief-model>
 PAIS_EVIDENCE_BRIEF_BASE_URL=<hosted-generation-base-url>
@@ -95,14 +100,25 @@ abstracts-explorer pais run-example giardia-positive
 Ingest the local PAIS benchmark rows as the first database batch:
 
 ```bash
-abstracts-explorer pais ingest-benchmark
+PAPER_DB=/share/runs/2026/04-23-paisdb-phflot/paisdb_explorer/data/paisdb_benchmark_batched.db \
+abstracts-explorer pais ingest-benchmark \
+  --batched \
+  --screen-batch-size 8 \
+  --hosted-concurrency 4 \
+  --hosted-chunk-size 16 \
+  --fallback-from-brief \
+  --embed \
+  --embedding-batch-size 64 \
+  --output results/paisdb_benchmark_batched_fallback_fill.json
 ```
 
 Limit the run while testing model wiring:
 
 ```bash
-abstracts-explorer pais ingest-benchmark --limit 10
+abstracts-explorer pais ingest-benchmark --batched --limit 10 --screen-batch-size 4
 ```
+
+`--fallback-from-brief` is an explicit repair option. It first retries hosted structured extraction; if that output is invalid but a validated evidence brief exists, the pipeline creates a low-confidence evidence record from the brief and records a deterministic `structured_extraction` ModelRun with backend `deterministic_fallback`.
 
 Export evidence embedding texts. These texts are the stage-2 PAIS evidence brief text, not a deterministic re-rendering of the structured extraction:
 
@@ -113,7 +129,7 @@ abstracts-explorer pais export-embedding-texts --output pais_embedding_texts.jso
 Materialize pending embedding metadata through the configured embedding endpoint:
 
 ```bash
-abstracts-explorer pais embed-pending --limit 100
+abstracts-explorer pais embed-pending --limit 100 --batch-size 64
 ```
 
 ## Web API

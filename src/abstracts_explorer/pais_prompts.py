@@ -68,10 +68,10 @@ BENCHMARK_SCREEN_PROMPT = PromptSpec(
 
 EVIDENCE_BRIEF_PROMPT = PromptSpec(
     name="pais_evidence_brief",
-    version="2026-05-27-v1",
+    version="2026-05-27-v2",
     system=(
-        "You create compact, source-grounded PAIS evidence briefs for embedding and retrieval. "
-        "Use only the supplied article text and candidate relation context. Return only JSON."
+        "Return one valid JSON object only. Use only supplied biomedical source text. "
+        "Never write markdown, comments, explanations, or text after the JSON object."
     ),
     user=(
         "Article metadata:\n{article_json}\n\n"
@@ -79,26 +79,31 @@ EVIDENCE_BRIEF_PROMPT = PromptSpec(
         "Disease or phenotype candidate:\n{disease_json}\n\n"
         "Title:\n{title}\n\n"
         "Abstract:\n{abstract}\n\n"
-        "Create a compact PAIS evidence brief. Include pathogen, disease/phenotype, host, timing after "
-        "infection, study design, evidence type, mechanism, molecular data, and uncertainty if available. "
-        "Do not invent missing host, mechanism, modality, or timing. Explicitly state unknown when relevant "
-        "information is not in the source text. Keep source quotes short.\n\n"
+        "Create a compact PAIS evidence brief. Use only title/abstract. Do not infer external facts. "
+        "Use unknown when host, timing, mechanism, or molecular data are not stated. Keep every string short. "
+        "Do not create extra top-level keys. Use double quotes for all JSON keys and strings. "
+        "Do not use trailing commas. Output must be parseable by json.loads.\n\n"
         "The embedding_text should follow this shape:\n"
         "PAIS evidence brief. Article: <title or PMID>. Candidate relation: <pathogen> -> <disease>. "
         "Host/model: <...>. Timing: <...>. Evidence type: <...>. Finding: <...>. "
         "PAIS category: <...>. Mechanism: <...>. Molecular data: <...>. "
         "Limitations/uncertainty: <...>. Source support: <...>.\n\n"
-        "Return JSON matching the PAISEvidenceBriefResult schema."
+        "Constraints: embedding_text <= 900 characters; source_span_quotes <= 2 items; "
+        "each quote <= 180 characters.\n\n"
+        "Return exactly this minified JSON shape:\n"
+        '{{"embedding_text":"...","key_entities":{{"pathogen":"...","disease_or_phenotype":"...",'
+        '"host":"unknown","organism_or_model":"unknown","tissue_or_sample":"unknown"}},'
+        '"brief_quality_flags":[],"source_span_quotes":[],"uncertainty_notes":null}}'
     ),
 )
 
 
 STRUCTURED_EXTRACTION_PROMPT = PromptSpec(
     name="pais_structured_extraction",
-    version="2026-05-27-v1",
+    version="2026-05-27-v2",
     system=(
-        "You convert source-grounded PAIS evidence into a strict database record. "
-        "Do not use external knowledge. Use unknown rather than inventing values. Return only JSON."
+        "Return one valid JSON object only. Use only supplied biomedical source text and evidence brief. "
+        "Never write markdown, comments, explanations, or text after the JSON object."
     ),
     user=(
         "Article metadata:\n{article_json}\n\n"
@@ -107,10 +112,38 @@ STRUCTURED_EXTRACTION_PROMPT = PromptSpec(
         "Evidence brief:\n{brief_json}\n\n"
         "Title:\n{title}\n\n"
         "Abstract:\n{abstract}\n\n"
-        "Fill PAISEvidenceExtractionResult. Use enum values from the schema. Keep the extraction "
-        "source-grounded. Source spans should be snippets from the title, abstract, or brief. Do not "
-        "invent values that are not supported by the supplied text.\n\n"
-        "Return JSON matching the PAISEvidenceExtractionResult schema."
+        "Fill PAISEvidenceExtractionResult. Keep it source-grounded and concise. "
+        "Do not invent values that are not supported by the supplied text. "
+        "Use double quotes for all JSON keys and strings. Do not use trailing commas. "
+        "Output must be parseable by json.loads.\n\n"
+        "Allowed enum values:\n"
+        "host_type: human, animal_model, cell_line, organoid, in_vitro, mixed, unknown\n"
+        "relation_type: causes, associated_with, increases_risk, worsens, protective, "
+        "no_significant_association, mentions_only, unclear\n"
+        "pais_category: true_pais, post_acute_sequela, acute_infection, chronic_active_infection, "
+        "persistent_pathogen_or_antigen, adjacent_mechanism, non_pais, unclear\n"
+        "evidence_type: clinical_cohort, case_control, longitudinal_cohort, case_report, animal_model, "
+        "cell_model, molecular_assay, omics_study, review, database_or_mining, unclear\n"
+        "confidence: high, medium, low, unknown\n\n"
+        "If no allowed enum fits, use unclear for relation_type/pais_category/evidence_type and unknown for "
+        "host_type/confidence. Never create enum values such as biomarker, transmission, prospective study, "
+        "or vaccination strategy.\n\n"
+        "Length limits: statement <= 240 characters; summary <= 360 characters; rationale <= 180 characters; "
+        "source_spans <= 2 items; each source_spans text <= 180 characters; limitations <= 3 items.\n\n"
+        "Return exactly this minified JSON shape:\n"
+        '{{"article":{{"pmid":null,"doi":null,"title":"...","publication_year":null}},'
+        '"pathogen":{{"name":"...","normalized_name":"...","identifiers":{{}}}},'
+        '"disease_or_phenotype":{{"name":"...","normalized_name":"...","identifiers":{{}}}},'
+        '"host_context":{{"host_name":null,"host_taxid":null,"host_type":"unknown","species":null,'
+        '"tissue_or_sample":null,"cohort_or_model_description":null}},'
+        '"relationship":{{"relation_type":"unclear","timing_after_infection":null,"statement":"..."}},'
+        '"pais_classification":{{"pais_category":"unclear","rationale":"..."}},'
+        '"evidence":{{"evidence_type":"unclear","disease_phenotypes":[],"pathogen_details":[],"summary":"..."}},'
+        '"mechanism":{{"mechanism_summary":null}},'
+        '"molecular_data":{{"molecular_data_summary":null,"molecular_modalities":[]}},'
+        '"source_spans":[{{"text":"...","source":"abstract"}}],'
+        '"confidence":{{"confidence":"unknown","rationale":"..."}},'
+        '"limitations":[],"disagreement_with_screen":false,"quality_flags":[]}}'
     ),
 )
 

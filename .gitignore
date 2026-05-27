@@ -1,3 +1,5 @@
+results/
+
 # Data files
 data/
 *_20[0-9][0-9].json

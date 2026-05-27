@@ -14,7 +14,11 @@ from sqlalchemy import select
 from abstracts_explorer.config import get_config
 from abstracts_explorer.database import DatabaseManager
 from abstracts_explorer.db_models import EmbeddingRecord, PAISEvidenceRecord
-from abstracts_explorer.pais_benchmark_ingest import default_benchmark_input_path, ingest_benchmark_dataset
+from abstracts_explorer.pais_benchmark_ingest import (
+    default_benchmark_input_path,
+    ingest_benchmark_dataset,
+    ingest_benchmark_dataset_batched,
+)
 from abstracts_explorer.pais_examples import EXAMPLES, get_example
 from abstracts_explorer.pais_llm import _api_url
 from abstracts_explorer.pais_pipeline import embed_pending_records, run_candidate_pipeline
@@ -55,6 +59,7 @@ def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     embed_parser = pais_subparsers.add_parser("embed-pending", help="Embed pending PAIS evidence records")
     embed_parser.add_argument("--limit", type=int, default=100, help="Maximum pending records to process")
+    embed_parser.add_argument("--batch-size", type=int, default=64, help="Embedding texts per API request")
 
     ingest_parser = pais_subparsers.add_parser(
         "ingest-benchmark",
@@ -72,6 +77,50 @@ def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
         "--no-structured",
         action="store_true",
         help="Disable provider-native JSON schema mode for enrichment stages",
+    )
+    ingest_parser.add_argument(
+        "--batched",
+        action="store_true",
+        help="Use staged batched execution: local Mistral tensor batches, concurrent hosted calls",
+    )
+    ingest_parser.add_argument(
+        "--screen-only",
+        action="store_true",
+        help="Only run/persist the local benchmark screen stage",
+    )
+    ingest_parser.add_argument("--screen-batch-size", type=int, default=8, help="Local Mistral screen batch size")
+    ingest_parser.add_argument(
+        "--hosted-concurrency",
+        type=int,
+        default=8,
+        help="Concurrent hosted evidence/extraction requests",
+    )
+    ingest_parser.add_argument(
+        "--hosted-chunk-size",
+        type=int,
+        default=32,
+        help="Hosted items to submit before committing results",
+    )
+    ingest_parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="Embed pending PAIS evidence texts after enrichment",
+    )
+    ingest_parser.add_argument(
+        "--fallback-from-brief",
+        action="store_true",
+        help="Create flagged deterministic evidence records from valid briefs when structured extraction is invalid",
+    )
+    ingest_parser.add_argument(
+        "--embedding-batch-size",
+        type=int,
+        default=64,
+        help="Embedding texts per API request when --embed is set",
+    )
+    ingest_parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Do not skip rows that already have persisted screen/evidence records",
     )
 
     smoke_parser = pais_subparsers.add_parser("smoke", help="Inspect configured PAIS model endpoints")
@@ -98,13 +147,22 @@ def pais_command(args: argparse.Namespace) -> int:
     if args.pais_command == "export-embedding-texts":
         return _export_embedding_texts_command(output=args.output, limit=args.limit)
     if args.pais_command == "embed-pending":
-        return _embed_pending_command(limit=args.limit)
+        return _embed_pending_command(limit=args.limit, batch_size=args.batch_size)
     if args.pais_command == "ingest-benchmark":
         return _ingest_benchmark_command(
             input_path=args.input,
             limit=args.limit,
             output=args.output,
             structured=not args.no_structured,
+            batched=args.batched,
+            screen_only=args.screen_only,
+            screen_batch_size=args.screen_batch_size,
+            hosted_concurrency=args.hosted_concurrency,
+            hosted_chunk_size=args.hosted_chunk_size,
+            embed=args.embed,
+            fallback_from_brief=args.fallback_from_brief,
+            embedding_batch_size=args.embedding_batch_size,
+            resume=not args.no_resume,
         )
     if args.pais_command == "smoke":
         return _smoke_command(no_network=args.no_network)
@@ -186,9 +244,9 @@ def _export_embedding_texts_command(output: Optional[str], limit: Optional[int])
     return 0
 
 
-def _embed_pending_command(limit: int) -> int:
+def _embed_pending_command(limit: int, batch_size: int) -> int:
     with DatabaseManager() as database:
-        summary = embed_pending_records(database=database, limit=limit)
+        summary = embed_pending_records(database=database, limit=limit, batch_size=batch_size)
     _write_json(summary, None)
     return 0
 
@@ -198,25 +256,57 @@ def _ingest_benchmark_command(
     limit: Optional[int],
     output: Optional[str],
     structured: bool,
+    batched: bool,
+    screen_only: bool,
+    screen_batch_size: int,
+    hosted_concurrency: int,
+    hosted_chunk_size: int,
+    embed: bool,
+    fallback_from_brief: bool,
+    embedding_batch_size: int,
+    resume: bool,
 ) -> int:
     with DatabaseManager() as database:
-        summary = ingest_benchmark_dataset(
-            database=database,
-            input_path=input_path,
-            limit=limit,
-            structured=structured,
-        )
+        if batched or screen_only:
+            summary = ingest_benchmark_dataset_batched(
+                database=database,
+                input_path=input_path,
+                limit=limit,
+                structured=structured,
+                screen_batch_size=screen_batch_size,
+                hosted_concurrency=hosted_concurrency,
+                hosted_chunk_size=hosted_chunk_size,
+                screen_only=screen_only,
+                resume=resume,
+                embed=embed,
+                fallback_from_brief=fallback_from_brief,
+                embedding_batch_size=embedding_batch_size,
+            )
+        else:
+            summary = ingest_benchmark_dataset(
+                database=database,
+                input_path=input_path,
+                limit=limit,
+                structured=structured,
+            )
     _write_json(summary, output)
     return 0
 
 
 def _smoke_command(no_network: bool) -> int:
     config = get_config()
+    screen_configured = bool(config.pais_screen_model)
+    if config.pais_screen_backend == "openai_compatible":
+        screen_configured = bool(config.pais_screen_model and config.pais_screen_base_url)
     report: dict[str, Any] = {
         "screen": {
+            "backend": config.pais_screen_backend,
             "base_url": config.pais_screen_base_url,
-            "configured": bool(config.pais_screen_model and config.pais_screen_base_url),
+            "configured": screen_configured,
+            "hf_home": config.pais_screen_hf_home,
+            "local_files_only": config.pais_screen_local_files_only,
             "model": config.pais_screen_model,
+            "revision": config.pais_screen_revision,
         },
         "evidence_brief": {
             "base_url": config.pais_evidence_brief_base_url,
@@ -235,11 +325,16 @@ def _smoke_command(no_network: bool) -> int:
         },
     }
     if not no_network:
-        report["endpoint_checks"] = {
-            "screen_models": _check_models(
+        screen_check = (
+            {"ok": True, "skipped": True, "reason": "local hf_transformers backend"}
+            if config.pais_screen_backend == "hf_transformers"
+            else _check_models(
                 config.pais_screen_base_url,
                 config.pais_screen_auth_token or config.llm_backend_auth_token,
-            ),
+            )
+        )
+        report["endpoint_checks"] = {
+            "screen_models": screen_check,
             "evidence_models": _check_models(
                 config.pais_evidence_brief_base_url,
                 config.pais_evidence_brief_auth_token or config.llm_backend_auth_token,

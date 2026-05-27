@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from abstracts_explorer.database import DatabaseManager
 from abstracts_explorer.db_models import CandidateRelation, EmbeddingRecord, ModelRun, PAISEvidenceRecord
-from abstracts_explorer.pais_llm import PaisLLMResult
+from abstracts_explorer.pais_llm import PaisLLMResult, parse_json_object
 from abstracts_explorer.pais_pipeline import render_embedding_text_from_extraction, run_candidate_pipeline
 from abstracts_explorer.pais_prompts import build_benchmark_screen_messages
 from abstracts_explorer.pais_schemas import BenchmarkScreenResult, PAISEvidenceExtractionResult, PaisCandidateInput
@@ -48,6 +48,10 @@ def test_benchmark_screen_result_requires_inverse_labels():
         BenchmarkScreenResult(relationship=1, unrelated=1)
     with pytest.raises(ValueError):
         BenchmarkScreenResult(relationship=0, unrelated=0)
+
+
+def test_benchmark_parser_accepts_python_dict_style_output():
+    assert parse_json_object("{'relationship': 1, 'unrelated': 0}") == {"relationship": 1, "unrelated": 0}
 
 
 def test_benchmark_screen_prompt_matches_paisdb2_paper_zero_shot_prompt():

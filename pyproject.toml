@@ -60,6 +60,13 @@ web = [
     "flask-cors>=4.0.0",
     "waitress>=3.0.0",
 ]
+local-mistral = [
+    "torch>=2.4.0",
+    "transformers>=4.45.0",
+    "accelerate>=0.34.0",
+    "safetensors>=0.4.0",
+    "sentencepiece>=0.2.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/thawn/neurips-abstracts"

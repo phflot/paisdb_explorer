@@ -42,8 +42,14 @@ nano .env
 
 ### PAISDB Evidence Pipeline Settings
 
+- **PAIS_SCREEN_BACKEND**: Benchmark gatekeeper backend. Use `hf_transformers` for local Mistral, or `openai_compatible` only if you run a local Mistral server.
 - **PAIS_SCREEN_MODEL**: Benchmark gatekeeper model. Required for candidate screening, not for `pais init-db`.
-- **PAIS_SCREEN_BASE_URL**: OpenAI-compatible screen endpoint. Required for candidate screening, not for `pais init-db`.
+- **PAIS_SCREEN_REVISION**: Optional Hugging Face snapshot revision for local Mistral reproducibility.
+- **PAIS_SCREEN_HF_HOME**: Hugging Face cache root for local Mistral. In this workspace, prefer the copied `paisdb_local/.cache`.
+- **PAIS_SCREEN_LOCAL_FILES_ONLY**: Whether local Mistral must use only cached files.
+- **PAIS_SCREEN_CUDA_VISIBLE_DEVICES**: Optional GPU selector for local Mistral. Existing scheduler values are preserved.
+- **PAIS_SCREEN_MAX_NEW_TOKENS**: Maximum generated tokens for local Mistral screening.
+- **PAIS_SCREEN_BASE_URL**: OpenAI-compatible screen endpoint. Required only when `PAIS_SCREEN_BACKEND=openai_compatible`.
 - **PAIS_SCREEN_AUTH_TOKEN**: Optional screen endpoint token
 - **PAIS_EVIDENCE_BRIEF_MODEL**: Evidence brief model. Required only when hosted evidence enrichment is run.
 - **PAIS_EVIDENCE_BRIEF_BASE_URL**: Evidence brief endpoint. Required only when hosted evidence enrichment is run.
@@ -56,6 +62,14 @@ nano .env
 - **PAIS_EMBEDDING_AUTH_TOKEN**: Optional embedding endpoint token
 - **PAIS_STRUCTURED_OUTPUT_MODE**: Structured output mode (`json_schema` or fallback JSON prompt mode)
 - **PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN**: Allow hosted stages after invalid/error screen output (default: `false`)
+
+Benchmark/database-fill CLI tuning:
+
+- **`--batched`**: Use tensor-batched local Mistral screening, chunked hosted enrichment, and optional batch embeddings.
+- **`--screen-batch-size`**: Local Mistral batch size. `8` worked on the H100 in this workspace.
+- **`--hosted-concurrency`** / **`--hosted-chunk-size`**: Remote Qwen concurrency and commit chunk size. Lower concurrency improved JSON validity.
+- **`--fallback-from-brief`**: Explicitly create flagged low-confidence evidence records from validated evidence briefs when hosted structured extraction is invalid.
+- **`--embed`** / **`--embedding-batch-size`**: Embed pending evidence texts at the end of the ingest run.
 
 ### Data Directory
 

@@ -181,9 +181,15 @@ class Config:
         # PAISDB stage routing. The benchmark screen intentionally defaults to
         # a local endpoint; hosted Server 2 models are used only after the
         # Mistral screen passes the gate.
+        self.pais_screen_backend = self._get_env("PAIS_SCREEN_BACKEND", default="hf_transformers")
         self.pais_screen_model = self._get_env("PAIS_SCREEN_MODEL", default="")
         self.pais_screen_base_url = self._get_env("PAIS_SCREEN_BASE_URL", default="")
         self.pais_screen_auth_token = self._get_env("PAIS_SCREEN_AUTH_TOKEN", default="")
+        self.pais_screen_revision = self._get_env("PAIS_SCREEN_REVISION", default="")
+        self.pais_screen_hf_home = self._get_env("PAIS_SCREEN_HF_HOME", default="")
+        self.pais_screen_local_files_only = self._get_env_bool("PAIS_SCREEN_LOCAL_FILES_ONLY", default=True)
+        self.pais_screen_cuda_visible_devices = self._get_env("PAIS_SCREEN_CUDA_VISIBLE_DEVICES", default="")
+        self.pais_screen_max_new_tokens = self._get_env_int("PAIS_SCREEN_MAX_NEW_TOKENS", default=300)
         self.pais_evidence_brief_model = self._get_env("PAIS_EVIDENCE_BRIEF_MODEL", default="")
         self.pais_evidence_brief_base_url = self._get_env("PAIS_EVIDENCE_BRIEF_BASE_URL", default="")
         self.pais_evidence_brief_auth_token = self._get_env("PAIS_EVIDENCE_BRIEF_AUTH_TOKEN", default="")
@@ -423,9 +429,15 @@ class Config:
             "EMBEDDING_MODEL",
             "LLM_BACKEND_URL",
             "LLM_BACKEND_AUTH_TOKEN",
+            "PAIS_SCREEN_BACKEND",
             "PAIS_SCREEN_MODEL",
             "PAIS_SCREEN_BASE_URL",
             "PAIS_SCREEN_AUTH_TOKEN",
+            "PAIS_SCREEN_REVISION",
+            "PAIS_SCREEN_HF_HOME",
+            "PAIS_SCREEN_LOCAL_FILES_ONLY",
+            "PAIS_SCREEN_CUDA_VISIBLE_DEVICES",
+            "PAIS_SCREEN_MAX_NEW_TOKENS",
             "PAIS_EVIDENCE_BRIEF_MODEL",
             "PAIS_EVIDENCE_BRIEF_BASE_URL",
             "PAIS_EVIDENCE_BRIEF_AUTH_TOKEN",
@@ -484,8 +496,14 @@ class Config:
             "embedding_model": self.embedding_model,
             "llm_backend_url": self.llm_backend_url,
             "llm_backend_auth_token": "***" if self.llm_backend_auth_token else "",
+            "pais_screen_backend": self.pais_screen_backend,
             "pais_screen_model": self.pais_screen_model,
             "pais_screen_base_url": self.pais_screen_base_url,
+            "pais_screen_revision": self.pais_screen_revision,
+            "pais_screen_hf_home": self.pais_screen_hf_home,
+            "pais_screen_local_files_only": self.pais_screen_local_files_only,
+            "pais_screen_cuda_visible_devices": self.pais_screen_cuda_visible_devices,
+            "pais_screen_max_new_tokens": self.pais_screen_max_new_tokens,
             "pais_evidence_brief_model": self.pais_evidence_brief_model,
             "pais_evidence_brief_base_url": self.pais_evidence_brief_base_url,
             "pais_extraction_model": self.pais_extraction_model,

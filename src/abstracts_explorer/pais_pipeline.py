@@ -204,7 +204,7 @@ def build_evidence_brief(
         schema_model=PAISEvidenceBriefResult,
         stage=PaisStage.EVIDENCE_BRIEF.value,
         temperature=0.0,
-        max_tokens=2048,
+        max_tokens=1024,
         structured=structured,
     )
     result = PAISEvidenceBriefResult.model_validate(call.parsed_json) if call.valid and call.parsed_json else None
@@ -225,7 +225,7 @@ def extract_evidence_record(
         schema_model=PAISEvidenceExtractionResult,
         stage=PaisStage.STRUCTURED_EXTRACTION.value,
         temperature=0.0,
-        max_tokens=4096,
+        max_tokens=3072,
         structured=structured,
     )
     result = (
@@ -269,6 +269,7 @@ def embed_pending_records(
     database: DatabaseManager,
     llm_client: Optional[OpenAICompatiblePaisClient] = None,
     limit: int = 100,
+    batch_size: int = 64,
 ) -> dict[str, Any]:
     """Embed pending PAIS evidence texts and update EmbeddingRecord metadata."""
     client = llm_client or OpenAICompatiblePaisClient()
@@ -287,24 +288,35 @@ def embed_pending_records(
     embedded = 0
     failed = 0
     try:
-        for record in records:
-            evidence = session.get(PAISEvidenceRecord, record.evidence_record_id)
-            if evidence is None:
-                record.status = EmbeddingStatus.FAILED.value
-                failed += 1
+        batch_size = max(1, batch_size)
+        for start in range(0, len(records), batch_size):
+            batch = records[start : start + batch_size]
+            texts = []
+            text_records = []
+            for record in batch:
+                evidence = session.get(PAISEvidenceRecord, record.evidence_record_id)
+                if evidence is None:
+                    record.status = EmbeddingStatus.FAILED.value
+                    failed += 1
+                    continue
+                texts.append(evidence.embedding_text)
+                text_records.append((record, evidence))
+            if not texts:
                 continue
             try:
-                vector = client.embed_texts([evidence.embedding_text])[0]
-                record.embedding_model = client.config.pais_embedding_model
-                record.embedding_dim = len(vector)
-                record.vector_db = client.config.pais_embedding_base_url
-                record.vector_collection = "pais_evidence"
-                record.vector_id = f"pais-evidence-{evidence.id}-{record.text_sha256[:12]}"
-                record.status = EmbeddingStatus.EMBEDDED.value
-                embedded += 1
+                vectors = client.embed_texts(texts)
+                for (record, evidence), vector in zip(text_records, vectors):
+                    record.embedding_model = client.config.pais_embedding_model
+                    record.embedding_dim = len(vector)
+                    record.vector_db = client.config.pais_embedding_base_url
+                    record.vector_collection = "pais_evidence"
+                    record.vector_id = f"pais-evidence-{evidence.id}-{record.text_sha256[:12]}"
+                    record.status = EmbeddingStatus.EMBEDDED.value
+                    embedded += 1
             except Exception:
-                record.status = EmbeddingStatus.FAILED.value
-                failed += 1
+                for record, _evidence in text_records:
+                    record.status = EmbeddingStatus.FAILED.value
+                    failed += 1
         session.commit()
     except Exception:
         session.rollback()

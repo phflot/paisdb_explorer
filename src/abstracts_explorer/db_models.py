@@ -9,12 +9,15 @@ These models support both SQLite and PostgreSQL backends.
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
     DateTime,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase
@@ -433,3 +436,229 @@ class EvalResult(Base):
             f"<EvalResult(id={self.id}, run='{self.run_id}', "
             f"qa_pair={self.qa_pair_id}, score={self.answer_score})>"
         )
+
+
+class Article(Base):
+    """PubMed/article-level source text for PAIS evidence building."""
+
+    __tablename__ = "pais_articles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pmid = Column(String, nullable=True, index=True)
+    doi = Column(String, nullable=True, index=True)
+    title = Column(Text, nullable=False)
+    abstract = Column(Text, nullable=False)
+    journal = Column(Text, nullable=True)
+    publication_year = Column(Integer, nullable=True, index=True)
+    publication_date = Column(String, nullable=True)
+    publication_type = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    source_url = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        """String representation of Article."""
+        return f"<Article(id={self.id}, pmid='{self.pmid}', title='{self.title[:50]}...')>"
+
+
+class Pathogen(Base):
+    """Pathogen candidate entity."""
+
+    __tablename__ = "pais_pathogens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False, index=True)
+    normalized_name = Column(Text, nullable=True, index=True)
+    ncbi_taxid = Column(String, nullable=True, index=True)
+    taxonomic_rank = Column(String, nullable=True)
+    strain_or_variant = Column(Text, nullable=True)
+    synonyms_json = Column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        """String representation of Pathogen."""
+        return f"<Pathogen(id={self.id}, name='{self.name}')>"
+
+
+class DiseasePhenotype(Base):
+    """Disease or phenotype candidate entity."""
+
+    __tablename__ = "pais_disease_phenotypes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False, index=True)
+    normalized_name = Column(Text, nullable=True, index=True)
+    doid = Column(String, nullable=True, index=True)
+    hpo_id = Column(String, nullable=True, index=True)
+    mondo_id = Column(String, nullable=True, index=True)
+    synonyms_json = Column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        """String representation of DiseasePhenotype."""
+        return f"<DiseasePhenotype(id={self.id}, name='{self.name}')>"
+
+
+class CandidateRelation(Base):
+    """Article-pathogen-disease candidate and benchmark screen decision."""
+
+    __tablename__ = "pais_candidate_relations"
+    __table_args__ = (UniqueConstraint("candidate_key", name="uq_pais_candidate_key"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    article_id = Column(Integer, ForeignKey("pais_articles.id"), nullable=False, index=True)
+    pathogen_id = Column(Integer, ForeignKey("pais_pathogens.id"), nullable=False, index=True)
+    disease_id = Column(Integer, ForeignKey("pais_disease_phenotypes.id"), nullable=False, index=True)
+    candidate_key = Column(String(64), nullable=False, index=True)
+    benchmark_relationship = Column(Integer, nullable=True)
+    benchmark_unrelated = Column(Integer, nullable=True)
+    screen_status = Column(String, nullable=True, index=True)
+    screen_confidence = Column(String, nullable=True)
+    screen_exclusion_reason = Column(String, nullable=True)
+    hosted_disagreement_flag = Column(Boolean, nullable=False, default=False, server_default="0")
+    quality_flags_json = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        """String representation of CandidateRelation."""
+        return f"<CandidateRelation(id={self.id}, status='{self.screen_status}', key='{self.candidate_key[:12]}')>"
+
+
+class HostContext(Base):
+    """Host/model context extracted for a PAIS evidence record."""
+
+    __tablename__ = "pais_host_contexts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    article_id = Column(Integer, ForeignKey("pais_articles.id"), nullable=False, index=True)
+    host_name = Column(Text, nullable=True)
+    host_taxid = Column(String, nullable=True)
+    host_type = Column(String, nullable=False, default="unknown", server_default="unknown")
+    species = Column(Text, nullable=True)
+    tissue_or_sample = Column(Text, nullable=True)
+    cohort_or_model_description = Column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        """String representation of HostContext."""
+        return f"<HostContext(id={self.id}, host_type='{self.host_type}')>"
+
+
+class PAISEvidenceRecord(Base):
+    """Source-grounded PAIS evidence record suitable for later database filling."""
+
+    __tablename__ = "pais_evidence_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    candidate_relation_id = Column(Integer, ForeignKey("pais_candidate_relations.id"), nullable=False, index=True)
+    host_context_id = Column(Integer, ForeignKey("pais_host_contexts.id"), nullable=True, index=True)
+    pais_category = Column(String, nullable=False, default="unclear", server_default="unclear")
+    relation_type = Column(String, nullable=False, default="unclear", server_default="unclear")
+    evidence_type = Column(String, nullable=False, default="unclear", server_default="unclear")
+    timing_after_infection = Column(Text, nullable=True)
+    mechanism_summary = Column(Text, nullable=True)
+    molecular_data_summary = Column(Text, nullable=True)
+    molecular_modalities_json = Column(Text, nullable=True)
+    disease_phenotypes_json = Column(Text, nullable=True)
+    pathogen_details_json = Column(Text, nullable=True)
+    source_evidence_spans_json = Column(Text, nullable=True)
+    llm_summary = Column(Text, nullable=True)
+    embedding_text = Column(Text, nullable=False)
+    confidence = Column(String, nullable=False, default="unknown", server_default="unknown")
+    limitations = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        """String representation of PAISEvidenceRecord."""
+        return f"<PAISEvidenceRecord(id={self.id}, category='{self.pais_category}')>"
+
+
+class ModelRun(Base):
+    """Provenance for one PAIS model invocation."""
+
+    __tablename__ = "pais_model_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stage = Column(String, nullable=False, index=True)
+    article_id = Column(Integer, ForeignKey("pais_articles.id"), nullable=True, index=True)
+    candidate_relation_id = Column(Integer, ForeignKey("pais_candidate_relations.id"), nullable=True, index=True)
+    evidence_record_id = Column(Integer, ForeignKey("pais_evidence_records.id"), nullable=True, index=True)
+    backend = Column(String, nullable=True)
+    model_id = Column(Text, nullable=True)
+    model_version = Column(Text, nullable=True)
+    endpoint_id = Column(Text, nullable=True)
+    structured_output_used = Column(Boolean, nullable=False, default=False, server_default="0")
+    prompt_name = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False)
+    prompt_sha256 = Column(String(64), nullable=False)
+    schema_name = Column(String, nullable=True)
+    schema_version = Column(String, nullable=True)
+    schema_sha256 = Column(String(64), nullable=True)
+    input_sha256 = Column(String(64), nullable=False)
+    raw_output = Column(Text, nullable=False)
+    parsed_json = Column(Text, nullable=True)
+    valid = Column(Boolean, nullable=False, default=False, server_default="0")
+    error_kind = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    elapsed_s = Column(Float, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+
+    def __repr__(self) -> str:
+        """String representation of ModelRun."""
+        return f"<ModelRun(id={self.id}, stage='{self.stage}', valid={self.valid})>"
+
+
+class EmbeddingRecord(Base):
+    """Embedding lifecycle record for PAIS evidence text."""
+
+    __tablename__ = "pais_embedding_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    evidence_record_id = Column(Integer, ForeignKey("pais_evidence_records.id"), nullable=False, index=True)
+    text_sha256 = Column(String(64), nullable=False, index=True)
+    embedding_model = Column(Text, nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    vector_db = Column(Text, nullable=True)
+    vector_collection = Column(Text, nullable=True)
+    vector_id = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="pending", server_default="pending", index=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        """String representation of EmbeddingRecord."""
+        return f"<EmbeddingRecord(id={self.id}, status='{self.status}')>"

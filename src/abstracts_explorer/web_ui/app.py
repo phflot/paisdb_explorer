@@ -719,6 +719,34 @@ def reset_chat():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/pais/run-candidate", methods=["POST"])
+def run_pais_candidate():
+    """
+    Run one PAIS article-pathogen-disease candidate through the evidence pipeline.
+
+    Expected JSON body follows the PaisCandidateInput schema:
+    ``article``, ``pathogen``, and ``disease`` objects.
+    """
+    try:
+        from pydantic import ValidationError
+
+        from abstracts_explorer.pais_pipeline import run_candidate_pipeline
+        from abstracts_explorer.pais_schemas import PaisCandidateInput
+
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"error": "JSON body is required"}), 400
+        try:
+            candidate = PaisCandidateInput.model_validate(data)
+        except ValidationError as exc:
+            return jsonify({"error": "Invalid PAIS candidate", "details": exc.errors()}), 400
+
+        summary = run_candidate_pipeline(candidate, database=get_database())
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/clusters/compute", methods=["POST"])
 def compute_clusters():
     """

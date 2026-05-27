@@ -1,0 +1,21 @@
+{
+  "article": {
+    "pmid": null,
+    "doi": null,
+    "title": "Chronic fatigue syndrome after Giardia enteritis: clinical characteristics",
+    "abstract": "A follow-up study of patients after Giardia enteritis reported chronic fatigue, irritable bowel symptoms, and long-term sickness absence after the infection.",
+    "journal": "Example fixture",
+    "publication_year": 2012,
+    "source": "manual_fixture"
+  },
+  "pathogen": {
+    "name": "Giardia lamblia",
+    "normalized_name": "giardia lamblia",
+    "synonyms": ["Giardia infection", "Giardia enteritis"]
+  },
+  "disease": {
+    "name": "chronic fatigue syndrome",
+    "normalized_name": "chronic fatigue syndrome",
+    "synonyms": ["chronic fatigue"]
+  }
+}

@@ -40,6 +40,23 @@ nano .env
 - **LLM_BACKEND_URL**: URL of the LLM backend server (default: `http://localhost:1234`)
 - **LLM_BACKEND_AUTH_TOKEN**: Optional authentication token for LLM backend (default: empty)
 
+### PAISDB Evidence Pipeline Settings
+
+- **PAIS_SCREEN_MODEL**: Benchmark gatekeeper model (default: `mistralai/Mistral-Small-Instruct-2409`)
+- **PAIS_SCREEN_BASE_URL**: Local OpenAI-compatible screen endpoint (default: `http://localhost:8000/v1`)
+- **PAIS_SCREEN_AUTH_TOKEN**: Optional screen endpoint token
+- **PAIS_EVIDENCE_BRIEF_MODEL**: Hosted evidence brief model (default: `Qwen/Qwen3-Coder-30B-A3B-Instruct`)
+- **PAIS_EVIDENCE_BRIEF_BASE_URL**: Hosted evidence brief endpoint (default: `http://134.96.118.198:18000/v1`)
+- **PAIS_EVIDENCE_BRIEF_AUTH_TOKEN**: Optional evidence brief endpoint token
+- **PAIS_EXTRACTION_MODEL**: Hosted structured extraction model (default: `Qwen/Qwen3-Coder-30B-A3B-Instruct`)
+- **PAIS_EXTRACTION_BASE_URL**: Hosted structured extraction endpoint (default: `http://134.96.118.198:18000/v1`)
+- **PAIS_EXTRACTION_AUTH_TOKEN**: Optional extraction endpoint token
+- **PAIS_EMBEDDING_MODEL**: PAIS evidence embedding model (default: `Qwen/Qwen3-Embedding-0.6B`)
+- **PAIS_EMBEDDING_BASE_URL**: PAIS evidence embedding endpoint (default: `http://134.96.118.198:18080/v1`)
+- **PAIS_EMBEDDING_AUTH_TOKEN**: Optional embedding endpoint token
+- **PAIS_STRUCTURED_OUTPUT_MODE**: Structured output mode (`json_schema` or fallback JSON prompt mode)
+- **PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN**: Allow hosted stages after invalid/error screen output (default: `false`)
+
 ### Data Directory
 
 - **DATA_DIR**: Base directory for data files (default: `data`)

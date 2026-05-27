@@ -1,0 +1,17 @@
+{
+  "article": {
+    "title": "No significant association between pathogen X infection and disease Y symptoms",
+    "abstract": "The cohort study tested whether prior pathogen X infection was associated with later disease Y symptoms. No statistically significant association was observed.",
+    "source": "synthetic_fixture"
+  },
+  "pathogen": {
+    "name": "pathogen X",
+    "normalized_name": "pathogen x",
+    "synonyms": []
+  },
+  "disease": {
+    "name": "disease Y symptoms",
+    "normalized_name": "disease y symptoms",
+    "synonyms": []
+  }
+}

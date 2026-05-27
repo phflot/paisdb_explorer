@@ -15,6 +15,7 @@ A package to download conference data and search it with LLM-based semantic sear
 - 🔌 MCP server for LLM-based cluster analysis
 - 🗄️ Multi-database backend support (SQLite and PostgreSQL)
 - ⚙️ Environment-based configuration with `.env` file support
+- 🧬 PAISDB candidate screening and article-level evidence extraction prototype
 
 ## Installation
 
@@ -114,6 +115,20 @@ PAPER_DB=postgresql://user:password@localhost/abstracts
 ```
 
 📖 See [Configuration Guide](docs/configuration.md) for more database options
+
+### PAISDB Evidence Pipeline
+
+PAISDB candidate screening and article-level evidence extraction is available under the `pais` CLI group:
+
+```bash
+abstracts-explorer pais init-db
+abstracts-explorer pais smoke --no-network
+abstracts-explorer pais run-example giardia-positive
+```
+
+The local Mistral-Small-Instruct-2409 benchmark screen is the gatekeeper. Hosted Server 2 models are used only for evidence enrichment and structured extraction after a positive or uncertain screen.
+
+📖 See [PAISDB Evidence Pipeline](docs/pais_pipeline.md) for model routing, schemas, provenance, and run commands.
 
 ## Quick Start
 

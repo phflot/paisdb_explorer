@@ -36,6 +36,7 @@ from abstracts_explorer.evaluation import (
     format_eval_summary,
     format_eval_result_detail,
 )
+from abstracts_explorer.pais_cli import add_pais_subparser, pais_command
 
 try:
     from abstracts_explorer._version import __version__
@@ -2720,6 +2721,7 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    add_pais_subparser(subparsers)
 
     # Download command
     download_parser = subparsers.add_parser(
@@ -3817,6 +3819,8 @@ Examples:
 
     if args.command == "download":
         return download_command(args)
+    elif args.command == "pais":
+        return pais_command(args)
     elif args.command == "create-embeddings":
         return create_embeddings_command(args)
     elif args.command == "pre-process":

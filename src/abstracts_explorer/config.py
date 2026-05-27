@@ -178,6 +178,36 @@ class Config:
         self.llm_backend_url = self._get_env("LLM_BACKEND_URL", default="http://localhost:1234")
         self.llm_backend_auth_token = self._get_env("LLM_BACKEND_AUTH_TOKEN", default="")
 
+        # PAISDB stage routing. The benchmark screen intentionally defaults to
+        # a local endpoint; hosted Server 2 models are used only after the
+        # Mistral screen passes the gate.
+        self.pais_screen_model = self._get_env("PAIS_SCREEN_MODEL", default="mistralai/Mistral-Small-Instruct-2409")
+        self.pais_screen_base_url = self._get_env("PAIS_SCREEN_BASE_URL", default="http://localhost:8000/v1")
+        self.pais_screen_auth_token = self._get_env("PAIS_SCREEN_AUTH_TOKEN", default="")
+        self.pais_evidence_brief_model = self._get_env(
+            "PAIS_EVIDENCE_BRIEF_MODEL", default="Qwen/Qwen3-Coder-30B-A3B-Instruct"
+        )
+        self.pais_evidence_brief_base_url = self._get_env(
+            "PAIS_EVIDENCE_BRIEF_BASE_URL", default="http://134.96.118.198:18000/v1"
+        )
+        self.pais_evidence_brief_auth_token = self._get_env("PAIS_EVIDENCE_BRIEF_AUTH_TOKEN", default="")
+        self.pais_extraction_model = self._get_env(
+            "PAIS_EXTRACTION_MODEL", default="Qwen/Qwen3-Coder-30B-A3B-Instruct"
+        )
+        self.pais_extraction_base_url = self._get_env(
+            "PAIS_EXTRACTION_BASE_URL", default="http://134.96.118.198:18000/v1"
+        )
+        self.pais_extraction_auth_token = self._get_env("PAIS_EXTRACTION_AUTH_TOKEN", default="")
+        self.pais_embedding_model = self._get_env("PAIS_EMBEDDING_MODEL", default="Qwen/Qwen3-Embedding-0.6B")
+        self.pais_embedding_base_url = self._get_env(
+            "PAIS_EMBEDDING_BASE_URL", default="http://134.96.118.198:18080/v1"
+        )
+        self.pais_embedding_auth_token = self._get_env("PAIS_EMBEDDING_AUTH_TOKEN", default="")
+        self.pais_structured_output_mode = self._get_env("PAIS_STRUCTURED_OUTPUT_MODE", default="json_schema")
+        self.pais_allow_adjudication_on_invalid_screen = self._get_env_bool(
+            "PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN", default=False
+        )
+
         # Database Configuration
         # PAPER_DB can be either:
         # 1. A PostgreSQL URL (e.g., "postgresql://user:pass@host/db")
@@ -403,6 +433,20 @@ class Config:
             "EMBEDDING_MODEL",
             "LLM_BACKEND_URL",
             "LLM_BACKEND_AUTH_TOKEN",
+            "PAIS_SCREEN_MODEL",
+            "PAIS_SCREEN_BASE_URL",
+            "PAIS_SCREEN_AUTH_TOKEN",
+            "PAIS_EVIDENCE_BRIEF_MODEL",
+            "PAIS_EVIDENCE_BRIEF_BASE_URL",
+            "PAIS_EVIDENCE_BRIEF_AUTH_TOKEN",
+            "PAIS_EXTRACTION_MODEL",
+            "PAIS_EXTRACTION_BASE_URL",
+            "PAIS_EXTRACTION_AUTH_TOKEN",
+            "PAIS_EMBEDDING_MODEL",
+            "PAIS_EMBEDDING_BASE_URL",
+            "PAIS_EMBEDDING_AUTH_TOKEN",
+            "PAIS_STRUCTURED_OUTPUT_MODE",
+            "PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN",
             "PAPER_DB",
             "POSTGRES_USER",
             "POSTGRES_HOST",
@@ -450,6 +494,16 @@ class Config:
             "embedding_model": self.embedding_model,
             "llm_backend_url": self.llm_backend_url,
             "llm_backend_auth_token": "***" if self.llm_backend_auth_token else "",
+            "pais_screen_model": self.pais_screen_model,
+            "pais_screen_base_url": self.pais_screen_base_url,
+            "pais_evidence_brief_model": self.pais_evidence_brief_model,
+            "pais_evidence_brief_base_url": self.pais_evidence_brief_base_url,
+            "pais_extraction_model": self.pais_extraction_model,
+            "pais_extraction_base_url": self.pais_extraction_base_url,
+            "pais_embedding_model": self.pais_embedding_model,
+            "pais_embedding_base_url": self.pais_embedding_base_url,
+            "pais_structured_output_mode": self.pais_structured_output_mode,
+            "pais_allow_adjudication_on_invalid_screen": self.pais_allow_adjudication_on_invalid_screen,
             "embedding_db": self.embedding_db,
             "database_url": self._mask_database_url(self.database_url),
             "collection_name": self.collection_name,

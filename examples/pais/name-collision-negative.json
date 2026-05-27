@@ -1,0 +1,17 @@
+{
+  "article": {
+    "title": "Genomic surveillance of Japanese encephalitis virus in mosquitoes",
+    "abstract": "Japanese encephalitis virus isolates from mosquito pools were sequenced to evaluate regional viral diversity. The abstract reports viral genomics and does not evaluate encephalitis as a disease outcome.",
+    "source": "manual_fixture"
+  },
+  "pathogen": {
+    "name": "Japanese encephalitis virus",
+    "normalized_name": "japanese encephalitis virus",
+    "synonyms": ["JEV"]
+  },
+  "disease": {
+    "name": "encephalitis",
+    "normalized_name": "encephalitis",
+    "synonyms": []
+  }
+}

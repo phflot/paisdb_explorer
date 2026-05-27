@@ -17,6 +17,30 @@ import {
     getCurrentTab
 } from './state.js';
 
+function escapeJsString(value) {
+    return String(value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n');
+}
+
+function buildPaisActionButton(paperUid, compact = false) {
+    const uid = escapeHtml(escapeJsString(paperUid));
+    const compactClass = compact ? ' pais-action-button-compact' : '';
+    return `
+        <button
+            type="button"
+            class="pais-action-button${compactClass}"
+            onclick="openPaisCandidate('${uid}', event)"
+            title="Screen this database paper with PAIS"
+        >
+            <i class="fas fa-microscope"></i>
+            <span>Screen with PAIS</span>
+        </button>
+    `;
+}
+
 /**
  * Build URL badges HTML for a paper
  * @param {Object} paper - Paper object with optional url, paper_pdf_url, poster_image_url
@@ -120,6 +144,7 @@ export function formatPaperCard(paper, options = {}) {
 
     // Get current priority for this paper
     const currentPriority = getPaperPriority(paper.uid);
+    const paisActionHtml = paper.uid ? buildPaisActionButton(paper.uid, compact) : '';
 
     // Generate star rating HTML
     let starsHtml = '<div class="flex-shrink-0 ml-2 flex items-center gap-0.5" onclick="event.stopPropagation()" title="Rate this paper">';
@@ -147,6 +172,7 @@ export function formatPaperCard(paper, options = {}) {
                 <i class="fas fa-users mr-1"></i>${escapeHtml(authors)}
             </p>
             ${buildUrlBadges(paper, compact)}
+            ${paisActionHtml ? `<div class="${compact ? 'mb-2' : 'mb-3'}" onclick="event.stopPropagation()">${paisActionHtml}</div>` : ''}
             ${metadata ? `<div class="${compact ? 'mb-2' : 'mb-3'}">${metadata}</div>` : ''}
             ${abstractHtml}
             ${!compact && paper.distance !== undefined && !metadata.includes('chart-line') ? `
@@ -192,14 +218,18 @@ export async function showPaperDetails(paperId) {
             ? paper.authors.join(', ')
             : 'Unknown';
         const title = paper.title || 'Untitled';
+        const paisActionHtml = paper.uid ? buildPaisActionButton(paper.uid, false) : '';
 
         modal.innerHTML = `
             <div class="bg-white dark:bg-gray-800 rounded-lg max-w-4xl max-h-[90vh] overflow-y-auto p-8">
                 <div class="flex items-start justify-between mb-4">
                     <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 flex-1">${renderInlineMarkdownWithLatex(title)}</h2>
-                    <button onclick="this.closest('.fixed').remove()" class="ml-4 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                        <i class="fas fa-times text-xl"></i>
-                    </button>
+                    <div class="ml-4 flex items-center gap-2">
+                        ${paisActionHtml}
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="mb-4 flex flex-wrap gap-2">

@@ -12,6 +12,7 @@ import logging
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from flask import Flask, render_template, request, jsonify, g, send_file, abort
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -64,6 +65,61 @@ app.wsgi_app = ProxyFix(  # type: ignore[assignment]
 # Initialize components (lazy loading)
 embeddings_manager = None
 rag_chat = None
+
+
+_SENSITIVE_URL_QUERY_KEYS = {
+    "api_key",
+    "apikey",
+    "key",
+    "access_token",
+    "auth_token",
+    "authorization",
+    "bearer",
+    "password",
+    "secret",
+    "credential",
+}
+
+
+def _is_sensitive_query_key(key: str) -> bool:
+    normalized = key.lower().replace("-", "_")
+    compact = normalized.replace("_", "")
+    return (
+        normalized in _SENSITIVE_URL_QUERY_KEYS
+        or compact in _SENSITIVE_URL_QUERY_KEYS
+        or "token" in normalized
+        or "secret" in normalized
+        or "password" in normalized
+        or "authorization" in normalized
+        or "credential" in normalized
+        or "bearer" in normalized
+    )
+
+
+def _sanitize_config_url(url: str) -> str:
+    """Return a URL safe for frontend display by removing credentials and secret query params."""
+    if not url:
+        return ""
+
+    try:
+        split = urlsplit(url)
+    except ValueError:
+        return ""
+
+    netloc = split.netloc.rsplit("@", 1)[-1]
+    safe_query = urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(split.query, keep_blank_values=True)
+            if not _is_sensitive_query_key(key)
+        ],
+        doseq=True,
+    )
+    return urlunsplit((split.scheme, netloc, split.path, safe_query, split.fragment))
+
+
+def _stage_configured(model: str, base_url: str) -> bool:
+    return bool(model and base_url)
 
 
 def get_database():
@@ -745,6 +801,51 @@ def run_pais_candidate():
         return jsonify(summary)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pais/status")
+def pais_status():
+    """
+    Return sanitized PAIS configuration status for the web UI.
+
+    This endpoint intentionally exposes only stage readiness, model names, base
+    URLs with credentials stripped, and structured-output mode. Auth tokens and
+    API keys must never be returned to the frontend.
+    """
+    config = get_config()
+    return jsonify(
+        {
+            "pais_screen_configured": _stage_configured(
+                config.pais_screen_model,
+                config.pais_screen_base_url,
+            ),
+            "pais_evidence_brief_configured": _stage_configured(
+                config.pais_evidence_brief_model,
+                config.pais_evidence_brief_base_url,
+            ),
+            "pais_extraction_configured": _stage_configured(
+                config.pais_extraction_model,
+                config.pais_extraction_base_url,
+            ),
+            "pais_embedding_configured": _stage_configured(
+                config.pais_embedding_model,
+                config.pais_embedding_base_url,
+            ),
+            "configured_models": {
+                "screen": config.pais_screen_model,
+                "evidence_brief": config.pais_evidence_brief_model,
+                "extraction": config.pais_extraction_model,
+                "embedding": config.pais_embedding_model,
+            },
+            "configured_base_urls": {
+                "screen": _sanitize_config_url(config.pais_screen_base_url),
+                "evidence_brief": _sanitize_config_url(config.pais_evidence_brief_base_url),
+                "extraction": _sanitize_config_url(config.pais_extraction_base_url),
+                "embedding": _sanitize_config_url(config.pais_embedding_base_url),
+            },
+            "pais_structured_output_mode": config.pais_structured_output_mode,
+        }
+    )
 
 
 @app.route("/api/clusters/compute", methods=["POST"])

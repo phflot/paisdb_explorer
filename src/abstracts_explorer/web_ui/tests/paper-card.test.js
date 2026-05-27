@@ -184,6 +184,23 @@ describe('Paper Card Module', () => {
             expect(html).toContain('star');
             expect(html).toContain('setPaperPriority');
         });
+
+        it('should show PAIS screening action without article text inputs', () => {
+            const paper = {
+                uid: 'pais-paper',
+                title: 'Paper',
+                authors: [],
+                abstract: 'Abstract'
+            };
+
+            const html = formatPaperCard(paper);
+
+            expect(html).toContain('Screen with PAIS');
+            expect(html).toContain("openPaisCandidate('pais-paper', event)");
+            expect(html).toContain('event.stopPropagation()');
+            expect(html).not.toMatch(/<input[^>]+(?:title|abstract|article)/i);
+            expect(html).not.toMatch(/<textarea/i);
+        });
     });
 
     describe('showPaperDetails', () => {
@@ -213,6 +230,8 @@ describe('Paper Card Module', () => {
             const modalHtml = modals[0].innerHTML;
             expect(modalHtml).toContain('NeurIPS');
             expect(modalHtml).toContain('fa-university');
+            expect(modalHtml).toContain('Screen with PAIS');
+            expect(modalHtml).toContain("openPaisCandidate('p1', event)");
         });
 
         it('should show PDF link when paper_pdf_url is present', async () => {

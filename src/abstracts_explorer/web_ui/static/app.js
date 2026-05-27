@@ -55,6 +55,12 @@ import {
     setPaperPriority,
     updateInterestingPapersCount
 } from './modules/paper-card.js';
+import {
+    initPaisStatus,
+    openPaisCandidate,
+    closePaisCandidateModal,
+    submitPaisCandidate
+} from './modules/pais.js';
 
 /**
  * Initialize the application
@@ -70,6 +76,7 @@ function initializeApp() {
     loadStats();
     loadFilterOptions();
     checkEmbeddingModelCompatibility();
+    initPaisStatus();
 
     // Update interesting papers count
     updateInterestingPapersCount();
@@ -197,6 +204,12 @@ function attachToWindow() {
     window.showPaperDetails = showPaperDetails;
     window.setPaperPriority = setPaperPriority;
     window.updateInterestingPapersCount = updateInterestingPapersCount;
+
+    // PAIS module
+    window.initPaisStatus = initPaisStatus;
+    window.openPaisCandidate = openPaisCandidate;
+    window.closePaisCandidateModal = closePaisCandidateModal;
+    window.submitPaisCandidate = submitPaisCandidate;
 }
 
 // Initialize when DOM is ready

@@ -136,3 +136,60 @@ def test_pais_status_endpoint_marks_unconfigured_stages():
     assert data["pais_evidence_brief_configured"] is False
     assert data["pais_extraction_configured"] is False
     assert data["pais_embedding_configured"] is False
+
+
+def test_available_filters_endpoint_uses_pais_sources():
+    flask_app.config["TESTING"] = True
+    config = _pais_config(
+        pais_embedding_model="Qwen/Qwen3-Embedding-8B",
+        pais_embedding_base_url="http://embed.test/v1",
+        pais_embedding_auth_token="token",
+    )
+    filters = {
+        "sources": ["paisdb2_benchmark_1000"],
+        "years": [2022],
+        "source_years": {"paisdb2_benchmark_1000": [2022]},
+        "default_source": "paisdb2_benchmark_1000",
+        "default_year": 2022,
+    }
+
+    with (
+        patch("abstracts_explorer.web_ui.app.get_config", return_value=config),
+        patch("abstracts_explorer.web_ui.app.get_database", return_value=object()),
+        patch("abstracts_explorer.web_ui.app.get_pais_available_filters", return_value=filters),
+    ):
+        with flask_app.test_client() as client:
+            response = client.get("/api/available-filters")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["conferences"] == ["paisdb2_benchmark_1000"]
+    assert data["conference_years"] == {"paisdb2_benchmark_1000": [2022]}
+    assert data["default_conference"] == "paisdb2_benchmark_1000"
+
+
+def test_stats_endpoint_uses_pais_stats_when_pais_embeddings_configured():
+    flask_app.config["TESTING"] = True
+    config = _pais_config(
+        pais_embedding_model="Qwen/Qwen3-Embedding-8B",
+        pais_embedding_base_url="http://embed.test/v1",
+        pais_embedding_auth_token="token",
+    )
+    stats = {"total_papers": 7, "total_evidence_records": 7, "total_articles": 4}
+    database = object()
+
+    with (
+        patch("abstracts_explorer.web_ui.app.get_config", return_value=config),
+        patch("abstracts_explorer.web_ui.app.get_database", return_value=database),
+        patch("abstracts_explorer.web_ui.app.get_pais_stats", return_value=stats) as pais_stats,
+    ):
+        with flask_app.test_client() as client:
+            response = client.get("/api/stats?conference=paisdb2_benchmark_1000&year=2022")
+
+    assert response.status_code == 200
+    assert response.get_json() == stats
+    pais_stats.assert_called_once_with(
+        database,
+        years=[2022],
+        sources=["paisdb2_benchmark_1000"],
+    )

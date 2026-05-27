@@ -10,6 +10,7 @@ from sqlalchemy import select
 from abstracts_explorer.database import DatabaseManager
 from abstracts_explorer.db_models import CandidateRelation, EmbeddingRecord, ModelRun, PAISEvidenceRecord
 from abstracts_explorer.pais_benchmark_ingest import (
+    _optional_int,
     candidate_from_benchmark_row,
     ingest_benchmark_dataset,
     ingest_benchmark_dataset_batched,
@@ -128,6 +129,16 @@ def test_candidate_from_benchmark_row_maps_source_columns():
     assert candidate.article.source == "paisdb2_benchmark_1000"
     assert candidate.pathogen.name == "Giardia lamblia"
     assert candidate.disease.name == "chronic fatigue syndrome"
+
+
+def test_optional_int_normalizes_malformed_publication_years():
+    assert _optional_int("20220.0") == 2022
+    assert _optional_int("20180.0") == 2018
+    assert _optional_int("2022.0") == 2022
+    assert _optional_int("2022") == 2022
+    assert _optional_int("") is None
+    assert _optional_int("not-a-year") is None
+    assert _optional_int("99990.0") is None
 
 
 def test_ingest_benchmark_dataset_stores_gold_as_quality_metadata(tmp_path):

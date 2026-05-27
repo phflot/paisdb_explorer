@@ -25,6 +25,8 @@ from abstracts_explorer.export_utils import export_papers_to_zip
 from abstracts_explorer.pais_evidence_store import (
     compute_pais_evidence_clusters,
     count_pais_evidence_within_distance,
+    get_pais_available_filters,
+    get_pais_stats,
     search_pais_evidence_semantic,
 )
 from abstracts_explorer.paper_utils import extract_top_keywords
@@ -398,7 +400,14 @@ def stats():
         conference = conference_param if conference_param else None
 
         database = get_database()
-        stats_data = database.get_stats(year=year, conference=conference)
+        if resolve_embedding_provider(get_config()).source.startswith("pais_"):
+            stats_data = get_pais_stats(
+                database,
+                years=[year] if year else None,
+                sources=[conference] if conference else None,
+            )
+        else:
+            stats_data = database.get_stats(year=year, conference=conference)
 
         return jsonify(stats_data)
     except ValueError as e:
@@ -512,9 +521,23 @@ def get_available_filters_endpoint():
         - default_year: year to pre-select (guaranteed to have DB data for the default conference)
     """
     try:
-        config = get_config()
         database = get_database()
 
+        if resolve_embedding_provider(get_config()).source.startswith("pais_"):
+            pais_filters = get_pais_available_filters(database)
+            return jsonify(
+                {
+                    "conferences": pais_filters["sources"],
+                    "years": pais_filters["years"],
+                    "conference_years": pais_filters["source_years"],
+                    "default_conference": pais_filters["default_source"],
+                    "default_year": pais_filters["default_year"],
+                    "allow_all_years": pais_filters.get("allow_all_years", False),
+                    "default_distance_threshold": _SIMILAR_DISTANCE_THRESHOLD,
+                }
+            )
+
+        config = get_config()
         db_conference_years = database.get_conference_years_from_db()
 
         conferences = sorted(db_conference_years.keys())
@@ -587,6 +610,7 @@ def search():
                     limit=limit,
                     distance_threshold=distance_threshold,
                     years=[int(y) for y in years] if years else None,
+                    sources=conferences if conferences else None,
                 )
             else:
                 papers = em.search_papers_semantic(
@@ -613,6 +637,7 @@ def search():
                             embeddings_manager=em,
                             distance_threshold=distance_threshold,
                             years=[int(y) for y in years] if years else None,
+                            sources=conferences if conferences else None,
                         )
                     else:
                         total_similar = em.count_papers_within_distance(
@@ -932,6 +957,7 @@ def compute_clusters():
                 database=database,
                 embeddings_manager=em,
                 years=[int(year) for year in years] if years else None,
+                sources=conferences if conferences else None,
             )
             return jsonify(clusters)
 
@@ -1105,6 +1131,7 @@ def search_custom_cluster():
                 limit=100,
                 distance_threshold=distance_threshold,
                 years=[int(year) for year in years] if years else None,
+                sources=conferences if conferences else None,
             )
             return jsonify(
                 {

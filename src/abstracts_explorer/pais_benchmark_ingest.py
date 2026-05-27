@@ -940,9 +940,24 @@ def _optional_int(value: Optional[str]) -> Optional[int]:
     if value is None:
         return None
     try:
-        return int(value)
+        parsed = float(value)
     except ValueError:
         return None
+
+    if not parsed.is_integer():
+        return None
+
+    integer = int(parsed)
+    if 1900 <= integer <= 2100:
+        return integer
+
+    # Some benchmark exports encoded years as YYYY0.0, e.g. 20220.0.
+    if integer % 10 == 0:
+        normalized = integer // 10
+        if 1900 <= normalized <= 2100:
+            return normalized
+
+    return None
 
 
 def _normalize_name(value: str) -> str:

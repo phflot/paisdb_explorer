@@ -88,20 +88,14 @@ export async function loadFilterOptions() {
             // Store conference_years mapping and all years for future use
             window.conferenceYearsMap = availableData.conference_years || {};
             window.allYears = availableData.years || [];
+            window.allowAllYears = Boolean(availableData.allow_all_years);
 
             // Populate year selector in header (only on initial load when empty)
             // Track if we just populated it to apply defaults afterward.
             let yearsJustPopulated = false;
             if (yearSelect && yearSelect.options.length === 0) {
-                if (availableData.years && availableData.years.length > 0) {
-                    availableData.years.forEach(year => {
-                        const option = document.createElement('option');
-                        option.value = year;
-                        option.textContent = year;
-                        yearSelect.appendChild(option);
-                    });
-                    yearsJustPopulated = true;
-                }
+                populateYearSelector(yearSelect, availableData.years || [], window.allowAllYears);
+                yearsJustPopulated = true;
             }
 
             // Populate conference selector in header (only on initial load when empty)
@@ -420,25 +414,11 @@ export function updateYearsForConference() {
     // Preserve currently selected year (single-select)
     const currentYear = yearSelect.value;
 
-    yearSelect.innerHTML = '';
-
     if (selectedConference) {
         const yearsForConference = window.conferenceYearsMap[selectedConference] || [];
-        yearsForConference.forEach(year => {
-            const option = document.createElement('option');
-            option.value = year;
-            option.textContent = year;
-            yearSelect.appendChild(option);
-        });
+        populateYearSelector(yearSelect, yearsForConference, window.allowAllYears);
     } else {
-        if (window.allYears && window.allYears.length > 0) {
-            window.allYears.forEach(year => {
-                const option = document.createElement('option');
-                option.value = year;
-                option.textContent = year;
-                yearSelect.appendChild(option);
-            });
-        }
+        populateYearSelector(yearSelect, window.allYears || [], window.allowAllYears);
     }
 
     // Restore previous selection if still available; fall back to first year
@@ -448,4 +428,31 @@ export function updateYearsForConference() {
     } else if (availableYears.length > 0) {
         yearSelect.value = availableYears[0];
     }
+}
+
+function populateYearSelector(yearSelect, years, includeAllYears = false) {
+    yearSelect.innerHTML = '';
+    const cleanYears = (years || []).filter(year => year !== null && year !== undefined && String(year) !== '');
+    if (cleanYears.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Year unavailable';
+        yearSelect.appendChild(option);
+        yearSelect.disabled = true;
+        return;
+    }
+
+    yearSelect.disabled = false;
+    if (includeAllYears) {
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = 'All years';
+        yearSelect.appendChild(allOption);
+    }
+    cleanYears.forEach(year => {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    });
 }

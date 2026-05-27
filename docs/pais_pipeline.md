@@ -22,23 +22,29 @@ High-confidence negative screens stop after storing the candidate relation and m
 
 ## Model Routing
 
-Defaults are configured in `.env.example`:
+Database initialization does not require model settings:
 
 ```bash
-PAIS_SCREEN_MODEL=mistralai/Mistral-Small-Instruct-2409
-PAIS_SCREEN_BASE_URL=http://localhost:8000/v1
-
-PAIS_EVIDENCE_BRIEF_MODEL=Qwen/Qwen3-Coder-30B-A3B-Instruct
-PAIS_EVIDENCE_BRIEF_BASE_URL=http://134.96.118.198:18000/v1
-
-PAIS_EXTRACTION_MODEL=Qwen/Qwen3-Coder-30B-A3B-Instruct
-PAIS_EXTRACTION_BASE_URL=http://134.96.118.198:18000/v1
-
-PAIS_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
-PAIS_EMBEDDING_BASE_URL=http://134.96.118.198:18080/v1
+abstracts-explorer pais init-db
 ```
 
-The Server 2 endpoints were smoke-tested in `llm_server/paisdb_model_host/results/smoke_20260527T163230Z.json`.
+Before running candidate screening, define the local benchmark-screen model and the hosted enrichment/extraction models in `.env` or the process environment:
+
+```bash
+PAIS_SCREEN_MODEL=<local-screen-model>
+PAIS_SCREEN_BASE_URL=<local-openai-compatible-base-url>
+
+PAIS_EVIDENCE_BRIEF_MODEL=<hosted-brief-model>
+PAIS_EVIDENCE_BRIEF_BASE_URL=<hosted-generation-base-url>
+
+PAIS_EXTRACTION_MODEL=<hosted-extraction-model>
+PAIS_EXTRACTION_BASE_URL=<hosted-generation-base-url>
+
+PAIS_EMBEDDING_MODEL=<embedding-model>
+PAIS_EMBEDDING_BASE_URL=<embedding-base-url>
+```
+
+Use `abstracts-explorer pais smoke --no-network` to confirm which stages are configured without calling any model endpoint.
 
 ## Database Tables
 

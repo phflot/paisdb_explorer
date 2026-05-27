@@ -57,17 +57,24 @@ class OpenAICompatiblePaisClient:
             model = self.config.pais_screen_model
             base_url = self.config.pais_screen_base_url
             token = self.config.pais_screen_auth_token
+            model_var = "PAIS_SCREEN_MODEL"
+            base_url_var = "PAIS_SCREEN_BASE_URL"
         elif stage == PaisStage.EVIDENCE_BRIEF.value:
             model = self.config.pais_evidence_brief_model
             base_url = self.config.pais_evidence_brief_base_url
             token = self.config.pais_evidence_brief_auth_token
+            model_var = "PAIS_EVIDENCE_BRIEF_MODEL"
+            base_url_var = "PAIS_EVIDENCE_BRIEF_BASE_URL"
         elif stage == PaisStage.STRUCTURED_EXTRACTION.value:
             model = self.config.pais_extraction_model
             base_url = self.config.pais_extraction_base_url
             token = self.config.pais_extraction_auth_token
+            model_var = "PAIS_EXTRACTION_MODEL"
+            base_url_var = "PAIS_EXTRACTION_BASE_URL"
         else:
             raise ValueError(f"Unknown PAIS stage: {stage}")
 
+        _require_stage_config(stage, model, base_url, model_var, base_url_var)
         return PaisStageConfig(
             stage=stage,
             backend="openai_compatible",
@@ -130,6 +137,13 @@ class OpenAICompatiblePaisClient:
         """Embed texts through the configured OpenAI-compatible embeddings endpoint."""
         if not texts:
             return []
+        _require_stage_config(
+            "embeddings",
+            self.config.pais_embedding_model,
+            self.config.pais_embedding_base_url,
+            "PAIS_EMBEDDING_MODEL",
+            "PAIS_EMBEDDING_BASE_URL",
+        )
         started = time.monotonic()
         url = _api_url(self.config.pais_embedding_base_url, "embeddings")
         payload = {"model": self.config.pais_embedding_model, "input": texts}
@@ -280,3 +294,22 @@ def _api_url(base_url: str, endpoint: str) -> str:
 
 def _endpoint_id(base_url: str) -> str:
     return base_url.rstrip("/")
+
+
+def _require_stage_config(
+    stage: str,
+    model: str,
+    base_url: str,
+    model_var: str,
+    base_url_var: str,
+) -> None:
+    missing = []
+    if not model:
+        missing.append(model_var)
+    if not base_url:
+        missing.append(base_url_var)
+    if missing:
+        raise ValueError(
+            f"PAIS stage '{stage}' is not configured. Set {', '.join(missing)} before running model calls. "
+            "Database initialization does not require PAIS model configuration."
+        )

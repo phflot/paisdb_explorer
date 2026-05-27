@@ -127,6 +127,7 @@ abstracts-explorer pais run-example giardia-positive
 ```
 
 The local Mistral-Small-Instruct-2409 benchmark screen is the gatekeeper. Hosted Server 2 models are used only for evidence enrichment and structured extraction after a positive or uncertain screen.
+`pais init-db` does not require model configuration; candidate runs require the `PAIS_*_MODEL` and `PAIS_*_BASE_URL` settings to be supplied first.
 
 📖 See [PAISDB Evidence Pipeline](docs/pais_pipeline.md) for model routing, schemas, provenance, and run commands.
 

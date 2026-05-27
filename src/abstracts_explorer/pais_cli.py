@@ -176,30 +176,49 @@ def _embed_pending_command(limit: int) -> int:
 def _smoke_command(no_network: bool) -> int:
     config = get_config()
     report: dict[str, Any] = {
-        "screen": {"base_url": config.pais_screen_base_url, "model": config.pais_screen_model},
+        "screen": {
+            "base_url": config.pais_screen_base_url,
+            "configured": bool(config.pais_screen_model and config.pais_screen_base_url),
+            "model": config.pais_screen_model,
+        },
         "evidence_brief": {
             "base_url": config.pais_evidence_brief_base_url,
+            "configured": bool(config.pais_evidence_brief_model and config.pais_evidence_brief_base_url),
             "model": config.pais_evidence_brief_model,
         },
         "structured_extraction": {
             "base_url": config.pais_extraction_base_url,
+            "configured": bool(config.pais_extraction_model and config.pais_extraction_base_url),
             "model": config.pais_extraction_model,
         },
-        "embeddings": {"base_url": config.pais_embedding_base_url, "model": config.pais_embedding_model},
+        "embeddings": {
+            "base_url": config.pais_embedding_base_url,
+            "configured": bool(config.pais_embedding_model and config.pais_embedding_base_url),
+            "model": config.pais_embedding_model,
+        },
     }
     if not no_network:
         report["endpoint_checks"] = {
-            "screen_models": _check_models(config.pais_screen_base_url, config.pais_screen_auth_token),
-            "evidence_models": _check_models(
-                config.pais_evidence_brief_base_url, config.pais_evidence_brief_auth_token
+            "screen_models": _check_models(
+                config.pais_screen_base_url,
+                config.pais_screen_auth_token or config.llm_backend_auth_token,
             ),
-            "embedding_models": _check_models(config.pais_embedding_base_url, config.pais_embedding_auth_token),
+            "evidence_models": _check_models(
+                config.pais_evidence_brief_base_url,
+                config.pais_evidence_brief_auth_token or config.llm_backend_auth_token,
+            ),
+            "embedding_models": _check_models(
+                config.pais_embedding_base_url,
+                config.pais_embedding_auth_token or config.llm_backend_auth_token,
+            ),
         }
     _write_json(report, None)
     return 0
 
 
 def _check_models(base_url: str, auth_token: str) -> dict[str, Any]:
+    if not base_url:
+        return {"ok": False, "skipped": True, "error": "Base URL is not configured"}
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
     try:
         response = requests.get(_api_url(base_url, "models"), headers=headers, timeout=10)

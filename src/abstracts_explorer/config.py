@@ -181,27 +181,17 @@ class Config:
         # PAISDB stage routing. The benchmark screen intentionally defaults to
         # a local endpoint; hosted Server 2 models are used only after the
         # Mistral screen passes the gate.
-        self.pais_screen_model = self._get_env("PAIS_SCREEN_MODEL", default="mistralai/Mistral-Small-Instruct-2409")
-        self.pais_screen_base_url = self._get_env("PAIS_SCREEN_BASE_URL", default="http://localhost:8000/v1")
+        self.pais_screen_model = self._get_env("PAIS_SCREEN_MODEL", default="")
+        self.pais_screen_base_url = self._get_env("PAIS_SCREEN_BASE_URL", default="")
         self.pais_screen_auth_token = self._get_env("PAIS_SCREEN_AUTH_TOKEN", default="")
-        self.pais_evidence_brief_model = self._get_env(
-            "PAIS_EVIDENCE_BRIEF_MODEL", default="Qwen/Qwen3-Coder-30B-A3B-Instruct"
-        )
-        self.pais_evidence_brief_base_url = self._get_env(
-            "PAIS_EVIDENCE_BRIEF_BASE_URL", default="http://134.96.118.198:18000/v1"
-        )
+        self.pais_evidence_brief_model = self._get_env("PAIS_EVIDENCE_BRIEF_MODEL", default="")
+        self.pais_evidence_brief_base_url = self._get_env("PAIS_EVIDENCE_BRIEF_BASE_URL", default="")
         self.pais_evidence_brief_auth_token = self._get_env("PAIS_EVIDENCE_BRIEF_AUTH_TOKEN", default="")
-        self.pais_extraction_model = self._get_env(
-            "PAIS_EXTRACTION_MODEL", default="Qwen/Qwen3-Coder-30B-A3B-Instruct"
-        )
-        self.pais_extraction_base_url = self._get_env(
-            "PAIS_EXTRACTION_BASE_URL", default="http://134.96.118.198:18000/v1"
-        )
+        self.pais_extraction_model = self._get_env("PAIS_EXTRACTION_MODEL", default="")
+        self.pais_extraction_base_url = self._get_env("PAIS_EXTRACTION_BASE_URL", default="")
         self.pais_extraction_auth_token = self._get_env("PAIS_EXTRACTION_AUTH_TOKEN", default="")
-        self.pais_embedding_model = self._get_env("PAIS_EMBEDDING_MODEL", default="Qwen/Qwen3-Embedding-0.6B")
-        self.pais_embedding_base_url = self._get_env(
-            "PAIS_EMBEDDING_BASE_URL", default="http://134.96.118.198:18080/v1"
-        )
+        self.pais_embedding_model = self._get_env("PAIS_EMBEDDING_MODEL", default="")
+        self.pais_embedding_base_url = self._get_env("PAIS_EMBEDDING_BASE_URL", default="")
         self.pais_embedding_auth_token = self._get_env("PAIS_EMBEDDING_AUTH_TOKEN", default="")
         self.pais_structured_output_mode = self._get_env("PAIS_STRUCTURED_OUTPUT_MODE", default="json_schema")
         self.pais_allow_adjudication_on_invalid_screen = self._get_env_bool(

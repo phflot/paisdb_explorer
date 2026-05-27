@@ -193,6 +193,37 @@ def get_pais_stats(
     }
 
 
+def get_pais_articles_per_year(
+    database,
+    sources: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    """Return PAIS article counts per publication year for the UI overview plot."""
+    params: list[Any] = []
+    filters = ["publication_year is not null"]
+    if sources:
+        clean_sources = [str(source) for source in sources if str(source).strip()]
+        if clean_sources:
+            placeholders = ",".join("?" for _ in clean_sources)
+            filters.append(f"source in ({placeholders})")
+            params.extend(clean_sources)
+
+    rows = database.query(
+        f"""
+        select publication_year as year, count(distinct id) as article_count
+        from pais_articles
+        where {" and ".join(filters)}
+        group by publication_year
+        order by publication_year
+        """,
+        tuple(params),
+    )
+    return {
+        "year_counts": {int(row["year"]): int(row["article_count"]) for row in rows},
+        "conference": sources[0] if sources and len(sources) == 1 else None,
+        "metric_label": "Articles",
+    }
+
+
 def ensure_pais_evidence_collection(
     database,
     embeddings_manager: EmbeddingsManager,
@@ -290,6 +321,88 @@ def count_pais_evidence_within_distance(
     return sum(1 for distance in distances if distance <= distance_threshold)
 
 
+def get_pais_topic_evolution(
+    topic_keywords: str,
+    database,
+    embeddings_manager: EmbeddingsManager,
+    sources: list[str],
+    distance_threshold: float = 1.1,
+) -> dict[str, Any]:
+    """Compute PAIS evidence topic evolution using the configured PAIS embedding provider."""
+    ensure_pais_evidence_collection(database, embeddings_manager, sources=sources)
+    filters = get_pais_available_filters(database)
+    query_embedding = embeddings_manager.generate_embedding(topic_keywords)
+
+    conference_data: dict[str, dict[str, Any]] = {}
+    total_matches = 0
+    all_years: set[int] = set()
+
+    for source in sources:
+        years = filters["source_years"].get(source, [])
+        year_counts: dict[int, int] = {}
+        year_relative: dict[int, float] = {}
+        year_totals: dict[int, int] = {}
+        year_distribution: dict[int, list[dict[str, Any]]] = {}
+
+        for year in years:
+            stats = get_pais_stats(database, years=[year], sources=[source])
+            total_for_year = int(stats["total_evidence_records"])
+            year_totals[year] = total_for_year
+
+            results = _query_pais_collection(
+                embeddings_manager,
+                topic_keywords,
+                n_results=max(total_for_year, 1),
+                years=[year],
+                sources=[source],
+                query_embedding=query_embedding,
+            )
+            papers = format_pais_evidence_search_results(results)
+            matching = [paper for paper in papers if paper.get("distance", 0.0) <= distance_threshold]
+            count = len(matching)
+            year_counts[year] = count
+            year_relative[year] = round((count / total_for_year) * 100, 2) if total_for_year > 0 else 0.0
+            year_distribution[year] = [
+                {
+                    "title": paper.get("title", ""),
+                    "session": paper.get("session", ""),
+                    "distance": paper.get("distance"),
+                }
+                for paper in matching[:3]
+            ]
+            total_matches += count
+
+        all_years.update(year_counts.keys())
+        sorted_years = sorted(year_counts.keys())
+        conference_data[source] = {
+            "year_counts": {year: year_counts[year] for year in sorted_years},
+            "year_relative": {year: year_relative[year] for year in sorted_years},
+            "year_totals": {year: year_totals[year] for year in sorted_years},
+            "papers_by_year": {
+                year: {
+                    "count": year_counts[year],
+                    "relative_percent": year_relative[year],
+                    "total_for_year": year_totals[year],
+                    "sample_papers": year_distribution[year],
+                }
+                for year in sorted_years
+            },
+        }
+
+    sorted_all_years = sorted(all_years)
+    return {
+        "topic": topic_keywords,
+        "conferences": sources,
+        "distance_threshold": distance_threshold,
+        "total_papers": total_matches,
+        "year_range": {
+            "start": min(sorted_all_years) if sorted_all_years else None,
+            "end": max(sorted_all_years) if sorted_all_years else None,
+        },
+        "conference_data": conference_data,
+    }
+
+
 def format_pais_evidence_search_results(search_results: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert Chroma PAIS evidence hits into paper-like dictionaries."""
     ids = search_results.get("ids", [[]])[0]
@@ -316,12 +429,14 @@ def _query_pais_collection(
     n_results: int,
     years: Optional[list[int]] = None,
     sources: Optional[list[str]] = None,
+    query_embedding: Optional[list[float]] = None,
 ) -> dict[str, Any]:
     """Query PAIS evidence Chroma data without applying legacy paper metadata parsing."""
     total = embeddings_manager.collection.count()
     if total <= 0:
         return {"ids": [[]], "metadatas": [[]], "documents": [[]], "distances": [[]]}
-    query_embedding = embeddings_manager.generate_embedding(query)
+    if query_embedding is None:
+        query_embedding = embeddings_manager.generate_embedding(query)
     kwargs: dict[str, Any] = {
         "query_embeddings": [query_embedding],
         "n_results": max(1, min(n_results, total)),

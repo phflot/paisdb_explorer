@@ -193,3 +193,76 @@ def test_stats_endpoint_uses_pais_stats_when_pais_embeddings_configured():
         years=[2022],
         sources=["paisdb2_benchmark_1000"],
     )
+
+
+def test_topic_evolution_endpoint_uses_pais_embedding_provider():
+    flask_app.config["TESTING"] = True
+    config = _pais_config(
+        pais_embedding_model="Qwen/Qwen3-Embedding-8B",
+        pais_embedding_base_url="http://embed.test/v1",
+        pais_embedding_auth_token="token",
+    )
+    database = object()
+    embeddings = object()
+    expected = {
+        "topic": "fatigue",
+        "conferences": ["paisdb2_benchmark_1000"],
+        "conference_data": {"paisdb2_benchmark_1000": {"year_counts": {"2022": 1}}},
+    }
+
+    with (
+        patch("abstracts_explorer.web_ui.app.get_config", return_value=config),
+        patch("abstracts_explorer.web_ui.app.get_database", return_value=database),
+        patch("abstracts_explorer.web_ui.app.get_embeddings_manager", return_value=embeddings),
+        patch("abstracts_explorer.web_ui.app.get_pais_topic_evolution", return_value=expected) as evolution,
+    ):
+        with flask_app.test_client() as client:
+            response = client.post(
+                "/api/topic-evolution",
+                json={
+                    "topic_keywords": "fatigue",
+                    "conferences": ["paisdb2_benchmark_1000"],
+                    "distance_threshold": 1.2,
+                },
+            )
+
+    assert response.status_code == 200
+    assert response.get_json() == expected
+    evolution.assert_called_once_with(
+        topic_keywords="fatigue",
+        database=database,
+        embeddings_manager=embeddings,
+        sources=["paisdb2_benchmark_1000"],
+        distance_threshold=1.2,
+    )
+
+
+def test_papers_per_year_endpoint_uses_pais_article_years():
+    flask_app.config["TESTING"] = True
+    config = _pais_config(
+        pais_embedding_model="Qwen/Qwen3-Embedding-8B",
+        pais_embedding_base_url="http://embed.test/v1",
+        pais_embedding_auth_token="token",
+    )
+    database = object()
+    expected = {
+        "year_counts": {2022: 13, 2024: 5},
+        "conference": "paisdb2_benchmark_1000",
+        "metric_label": "Articles",
+    }
+
+    with (
+        patch("abstracts_explorer.web_ui.app.get_config", return_value=config),
+        patch("abstracts_explorer.web_ui.app.get_database", return_value=database),
+        patch("abstracts_explorer.web_ui.app.get_pais_articles_per_year", return_value=expected) as counts,
+    ):
+        with flask_app.test_client() as client:
+            response = client.get("/api/papers-per-year?conference=paisdb2_benchmark_1000")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "year_counts": {"2022": 13, "2024": 5},
+        "conference": "paisdb2_benchmark_1000",
+        "metric_label": "Articles",
+    }
+    counts.assert_called_once_with(database, sources=["paisdb2_benchmark_1000"])

@@ -25,8 +25,10 @@ from abstracts_explorer.export_utils import export_papers_to_zip
 from abstracts_explorer.pais_evidence_store import (
     compute_pais_evidence_clusters,
     count_pais_evidence_within_distance,
+    get_pais_articles_per_year,
     get_pais_available_filters,
     get_pais_stats,
+    get_pais_topic_evolution,
     search_pais_evidence_semantic,
 )
 from abstracts_explorer.paper_utils import extract_top_keywords
@@ -1189,6 +1191,18 @@ def topic_evolution():
         conferences = data.get("conferences")
         distance_threshold = data.get("distance_threshold", 1.1)
 
+        if resolve_embedding_provider(get_config()).source.startswith("pais_"):
+            if not conferences:
+                return jsonify({"error": "A PAISDB source must be selected for topic evolution"}), 400
+            result = get_pais_topic_evolution(
+                topic_keywords=topic_keywords,
+                database=get_database(),
+                embeddings_manager=get_embeddings_manager(),
+                sources=[str(conference) for conference in conferences],
+                distance_threshold=float(distance_threshold),
+            )
+            return jsonify(result)
+
         from abstracts_explorer.mcp_server import get_topic_evolution as mcp_get_topic_evolution
 
         result_json = mcp_get_topic_evolution(
@@ -1223,6 +1237,14 @@ def papers_per_year():
     try:
         conference = request.args.get("conference")
         database = get_database()
+
+        if resolve_embedding_provider(get_config()).source.startswith("pais_"):
+            return jsonify(
+                get_pais_articles_per_year(
+                    database,
+                    sources=[conference] if conference else None,
+                )
+            )
 
         if conference:
             years = database.get_years_for_conference(conference)

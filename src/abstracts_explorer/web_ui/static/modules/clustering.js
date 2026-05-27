@@ -1987,6 +1987,7 @@ export async function loadPapersPerYear() {
         const yearCounts = data.year_counts || {};
         const years = Object.keys(yearCounts).map(Number).sort();
         const counts = years.map(y => yearCounts[y]);
+        const metricLabel = data.metric_label || 'Papers';
 
         if (years.length === 0) {
             plotDiv.innerHTML = '<div class="text-center text-gray-500 dark:text-gray-400 py-8"><p class="text-sm">No data available</p></div>';
@@ -2004,15 +2005,15 @@ export async function loadPapersPerYear() {
             type: 'scatter',
             mode: 'markers',
             marker: { color: colors, size: 12, line: { width: 2, color: '#7c3aed' }, symbol: 'diamond' },
-            hovertemplate: '<b>%{x}</b><br>Papers: %{y}<extra></extra>'
+            hovertemplate: `<b>%{x}</b><br>${metricLabel}: %{y}<extra></extra>`
         }];
 
         const confTitle = selectedConference || 'All Conferences';
         const plotColors6 = getPlotColors();
         const layout = {
-            title: { text: `Total Papers Per Year — ${confTitle}` },
+            title: { text: `Total ${metricLabel} Per Year — ${confTitle}` },
             xaxis: { title: { text: 'Year' }, type: 'linear', dtick: 1, automargin: true, showgrid: false, zeroline: false },
-            yaxis: { title: { text: 'Number of Papers' }, automargin: true, showgrid: false, zeroline: false },
+            yaxis: { title: { text: `Number of ${metricLabel}` }, automargin: true, showgrid: false, zeroline: false },
             margin: { t: 50, b: 50, l: 70, r: 20 },
             paper_bgcolor: plotColors6.paper_bgcolor,
             plot_bgcolor: plotColors6.plot_bgcolor,

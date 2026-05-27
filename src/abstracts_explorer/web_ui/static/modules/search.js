@@ -103,7 +103,7 @@ export function displaySearchResults(data) {
 
     if (!data.papers || data.papers.length === 0) {
         resultsDiv.innerHTML = renderEmptyState(
-            'No papers found',
+            'No evidence records found',
             'Try different keywords or search terms',
             'fa-inbox'
         );
@@ -115,7 +115,7 @@ export function displaySearchResults(data) {
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <span class="text-sm text-gray-600 dark:text-gray-400">${data.total_similar != null ? `Showing the <strong>${data.count}</strong> best matches out of <strong>${data.total_similar}</strong> similar papers` : `Found <strong>${data.count}</strong> papers`}</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">${data.total_similar != null ? `Showing the <strong>${data.count}</strong> best matches out of <strong>${data.total_similar}</strong> similar evidence records` : `Found <strong>${data.count}</strong> records`}</span>
                     ${data.use_embeddings ? '<span class="ml-2 px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs rounded-full">LLM-Powered</span>' : ''}
                 </div>
             </div>

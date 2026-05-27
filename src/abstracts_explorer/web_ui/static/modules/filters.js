@@ -28,7 +28,7 @@ function showConferenceErrorBanner() {
                 const safeHref = encodeURIComponent(conf);
                 return `<a href="/${safeHref}" class="underline hover:text-red-900">${safeName}</a>`;
             });
-            availableEl.innerHTML = `<strong>Available conferences:</strong> ${confLinks.join(', ')}`;
+            availableEl.innerHTML = `<strong>Available PAISDB sources:</strong> ${confLinks.join(', ')}`;
         } else if (availableEl) {
             availableEl.innerHTML = '';
         }
@@ -339,8 +339,8 @@ export function handleYearChange() {
         resultsDiv.innerHTML = `
             <div class="text-center text-gray-500 py-12">
                 <i class="fas fa-search text-6xl mb-4 opacity-20"></i>
-                <p class="text-lg">Enter a search query to find abstracts</p>
-                <p class="text-sm">Try "transformer architecture" or "reinforcement learning"</p>
+                <p class="text-lg">Enter a search query to find PAIS evidence</p>
+                <p class="text-sm">Try "Giardia chronic fatigue" or "post-acute viral sequelae"</p>
             </div>
         `;
     }
@@ -385,8 +385,8 @@ export function handleConferenceChange() {
         resultsDiv.innerHTML = `
             <div class="text-center text-gray-500 py-12">
                 <i class="fas fa-search text-6xl mb-4 opacity-20"></i>
-                <p class="text-lg">Enter a search query to find abstracts</p>
-                <p class="text-sm">Try "transformer architecture" or "reinforcement learning"</p>
+                <p class="text-lg">Enter a search query to find PAIS evidence</p>
+                <p class="text-sm">Try "Giardia chronic fatigue" or "post-acute viral sequelae"</p>
             </div>
         `;
     }

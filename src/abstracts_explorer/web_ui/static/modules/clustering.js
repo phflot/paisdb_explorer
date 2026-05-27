@@ -360,7 +360,7 @@ function visualizeHierarchyLevel(levelData) {
                     }
                 },
                 hovertemplate: '<b>%{text}</b><br>' +
-                              `${cluster.size} papers<br>` +
+                              `${cluster.size} evidence records<br>` +
                               (cluster.is_leaf ? '' : 'Click to drill down<br>') +
                               '<extra></extra>',
                 legendgroup: `cluster-${cluster.cluster_id}`,
@@ -545,7 +545,7 @@ export function visualizeClusters() {
             },
             hovertemplate: '<b>%{text}</b><br>' +
                           'Year: %{customdata.year}<br>' +
-                          'Conference: %{customdata.conference}<br>' +
+                          'Source: %{customdata.conference}<br>' +
                           '<extra></extra>',
             legendgroup: `cluster-${clusterId}`
         };
@@ -918,7 +918,7 @@ async function drillDownToCluster(clusterId) {
 function formatClusterStats(statistics, labels) {
     let statsHTML = 'Clusters';
     if (statistics) {
-        statsHTML += `<br><span class="text-xs font-normal">${statistics.total_papers} papers in ${statistics.n_clusters} clusters`;
+        statsHTML += `<br><span class="text-xs font-normal">${statistics.total_papers || statistics.n_papers} records in ${statistics.n_clusters} clusters`;
         if (statistics.n_noise > 0) {
             statsHTML += ` (<span class="text-red-600">${statistics.n_noise}</span> noise)`;
         }
@@ -1122,7 +1122,7 @@ function updateClusterVisualization() {
             hovertemplate: '<b>%{text}</b><br>' +
                           'Cluster: ' + label + '<br>' +
                           'Year: %{customdata.year}<br>' +
-                          'Conference: %{customdata.conference}<br>' +
+                          'Source: %{customdata.conference}<br>' +
                           '<extra></extra>'
         };
         
@@ -1413,7 +1413,7 @@ export async function searchCustomCluster() {
         // Re-visualize in custom cluster mode
         visualizeClustersWithCustomQueries();
         
-        console.log(`Found ${data.count} papers within distance ${distance} for query: "${query}"`);
+        console.log(`Found ${data.count} evidence records within distance ${distance} for query: "${query}"`);
         
         // Fetch and display topic evolution for this custom topic
         fetchAndDisplayTopicEvolution(query, distance, selectedConference);
@@ -1470,7 +1470,7 @@ function visualizeClustersWithCustomQueries() {
             y: nonMatchingPoints.map(p => p.y),
             mode: 'markers',
             type: 'scatter',
-            name: 'Other papers',
+            name: 'Other records',
             text: nonMatchingPoints.map(p => p.title || p.id),
             customdata: nonMatchingPoints.map(p => ({
                 id: p.id,
@@ -1489,7 +1489,7 @@ function visualizeClustersWithCustomQueries() {
             },
             hovertemplate: '<b>%{text}</b><br>' +
                           'Year: %{customdata.year}<br>' +
-                          'Conference: %{customdata.conference}<br>' +
+                          'Source: %{customdata.conference}<br>' +
                           '<extra></extra>',
             showlegend: false
         });
@@ -1537,7 +1537,7 @@ function visualizeClustersWithCustomQueries() {
             },
             hovertemplate: '<b>%{text}</b><br>' +
                           'Year: %{customdata.year}<br>' +
-                          'Conference: %{customdata.conference}<br>' +
+                          'Source: %{customdata.conference}<br>' +
                           'Distance: %{customdata.distance:.3f}<br>' +
                           '<extra></extra>',
             legendgroup: cluster.id
@@ -1671,7 +1671,7 @@ function updateCustomQueryLegend() {
                     <div class="w-4 h-4 rounded-full" style="background-color: ${clusterColor}"></div>
                     <div class="flex-1">
                         <div class="font-semibold text-sm text-gray-800 dark:text-gray-200">${escapedQuery}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">${cluster.count} papers (d=${cluster.distance.toFixed(2)})</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">${cluster.count} records (d=${cluster.distance.toFixed(2)})</div>
                     </div>
                 </div>
                 <button onclick="deleteCustomCluster('${cluster.id}')" 

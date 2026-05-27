@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Abstracts Explorer</title>
+    <title>PAISDB Explorer</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
 
@@ -320,14 +320,14 @@
                 <div class="flex items-center space-x-4">
                     <i class="fas fa-brain text-3xl"></i>
                     <div>
-                        <h1 class="text-2xl font-bold">Abstracts Explorer</h1>
-                        <p class="text-sm opacity-90">Explore conference abstracts with AI-powered search</p>
+                        <h1 class="text-2xl font-bold">PAISDB Explorer</h1>
+                        <p class="text-sm opacity-90">Explore pathogen-disease evidence with AI-powered search</p>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <!-- Conference Selector -->
+                    <!-- Source Selector -->
                     <div class="flex items-center space-x-2">
-                        <label for="conference-selector" class="text-sm font-medium">Conference:</label>
+                        <label for="conference-selector" class="text-sm font-medium">Source:</label>
                         <select id="conference-selector"
                             class="px-3 py-2 bg-white/20 text-white rounded-lg border border-white/30 focus:ring-2 focus:ring-white/50 focus:border-transparent backdrop-blur-sm"
                             onchange="handleConferenceChange()">
@@ -345,13 +345,6 @@
                     <div id="stats" class="text-right">
                         <div class="text-sm opacity-90">Loading stats...</div>
                     </div>
-                    <!-- Documentation link -->
-                    <a href="https://thawn.github.io/abstracts-explorer/web_ui.html" target="_blank" rel="noopener noreferrer"
-                        title="Open documentation"
-                        class="flex items-center space-x-1 px-3 py-2 bg-white/20 text-white rounded-lg border border-white/30 hover:bg-white/30 text-sm font-medium">
-                        <i class="fas fa-question-circle"></i>
-                        <span>Help</span>
-                    </a>
                 </div>
             </div>
         </div>
@@ -395,7 +388,7 @@
                 </div>
                 <div class="ml-3 flex-1">
                     <h3 class="text-sm font-medium text-red-800 dark:text-red-200">
-                        Conference Not Available
+                        PAISDB Source Not Available
                     </h3>
                     <div class="mt-2 text-sm text-red-700 dark:text-red-300">
                         <p id="conference-error-message"></p>
@@ -423,23 +416,23 @@
             <nav class="flex border-b dark:border-gray-700">
                 <button onclick="switchTab('search')" id="tab-search"
                     class="tab-btn flex-1 py-4 px-6 font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-purple-600"
-                    title="Semantic search for conference papers. Uses LLM-Powered search to find papers by meaning, not just exact keywords.">
-                    <i class="fas fa-search mr-2"></i>Search Abstracts (beta)
+                    title="Semantic search for PAISDB evidence records and benchmark articles.">
+                    <i class="fas fa-search mr-2"></i>Search Evidence (beta)
                 </button>
                 <button onclick="switchTab('chat')" id="tab-chat"
                     class="tab-btn flex-1 py-4 px-6 font-semibold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:text-gray-700 dark:hover:text-gray-200"
-                    title="Chat with an LLM assistant that answers questions about the conference papers using Retrieval-Augmented Generation (RAG).">
+                    title="Chat with an LLM assistant that answers questions about PAISDB evidence using Retrieval-Augmented Generation (RAG).">
                     <i class="fas fa-comments mr-2"></i>AI Chat (alpha)
                 </button>
                 <button onclick="switchTab('interesting')" id="tab-interesting"
                     class="tab-btn flex-1 py-4 px-6 font-semibold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:text-gray-700 dark:hover:text-gray-200"
-                    title="View and manage papers you have marked with stars. Export your selection as ZIP, JSON, or Markdown.">
-                    <i class="fas fa-star mr-2"></i>Interesting Papers (<span id="interesting-count">0</span>)
+                    title="View and manage records you have marked with stars. Export your selection as ZIP, JSON, or Markdown.">
+                    <i class="fas fa-star mr-2"></i>Saved Records (<span id="interesting-count">0</span>)
                 </button>
                 <button onclick="switchTab('clusters')" id="tab-clusters"
                     class="tab-btn flex-1 py-4 px-6 font-semibold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:text-gray-700 dark:hover:text-gray-200"
-                    title="Visualize and explore paper clusters based on topic similarity. Discover trends and themes across the conference.">
-                    <i class="fas fa-chart-bar mr-2"></i>Conference Statistics (alpha)
+                    title="Visualize and explore PAISDB evidence clusters based on semantic similarity.">
+                    <i class="fas fa-chart-bar mr-2"></i>PAISDB Clustering (alpha)
                 </button>
             </nav>
         </div>
@@ -480,8 +473,8 @@
             <div id="search-results" class="space-y-4">
                 <div class="text-center text-gray-500 dark:text-gray-400 py-12">
                     <i class="fas fa-search text-6xl mb-4 opacity-20"></i>
-                    <p class="text-lg">Enter a search query to find abstracts</p>
-                    <p class="text-sm">Try "transformer architecture" or "reinforcement learning"</p>
+                    <p class="text-lg">Enter a search query to find PAIS evidence</p>
+                    <p class="text-sm">Try "Giardia chronic fatigue" or "post-acute viral sequelae"</p>
                 </div>
             </div>
         </div>
@@ -494,8 +487,8 @@
                     <!-- Chat Header -->
                     <div class="flex-shrink-0 bg-purple-600 text-white px-6 py-4 flex justify-between items-center">
                         <div>
-                            <h3 class="font-semibold text-lg">AI Research Assistant</h3>
-                            <p class="text-sm opacity-90">Ask questions about conference abstracts</p>
+                            <h3 class="font-semibold text-lg">PAISDB Assistant</h3>
+                            <p class="text-sm opacity-90">Ask questions about PAIS evidence records</p>
                         </div>
                         <button onclick="resetChat()" class="px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30">
                             <i class="fas fa-redo mr-2"></i>Reset
@@ -512,8 +505,8 @@
                                 </div>
                                 <div class="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg p-4 shadow-sm max-w-2xl">
                                     <div class="markdown-content">
-                                        <p>Hello! I'm your AI research assistant. Ask me anything about conference
-                                            abstracts, and I'll help you find relevant research and insights.</p>
+                                        <p>Hello. I'm your PAISDB assistant. Ask me about benchmark articles,
+                                            pathogen-disease candidates, evidence records, mechanisms, or PAIS categories.</p>
                                     </div>
                                 </div>
                             </div>
@@ -521,11 +514,11 @@
                         <!-- MCP Tools Hint Bubble – injected by chat.js initMcpToolsHint() -->
                     </div>
 
-                    <!-- Mobile: View Papers button (shown after papers are loaded) -->
+                    <!-- Mobile: View Evidence button (shown after records are loaded) -->
                     <div id="mobile-papers-btn-wrapper" class="flex-shrink-0 lg:hidden border-t dark:border-gray-700 px-4 py-2 bg-white dark:bg-gray-800 hidden">
                         <button onclick="openPapersModal()"
                             class="w-full py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg border border-purple-200 dark:border-purple-700 text-sm font-medium hover:bg-purple-100 dark:hover:bg-purple-900/50 focus:ring-2 focus:ring-purple-600 focus:ring-offset-1">
-                            <i class="fas fa-file-alt mr-2"></i>View Relevant Papers (<span id="mobile-papers-count">0</span>)
+                            <i class="fas fa-file-alt mr-2"></i>View Relevant Evidence (<span id="mobile-papers-count">0</span>)
                         </button>
                     </div>
 
@@ -533,7 +526,7 @@
                     <div class="flex-shrink-0 p-6 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
                         <div class="flex gap-4">
                             <input type="text" id="chat-input"
-                                placeholder="Ask about abstracts, research areas, or specific techniques..."
+                                placeholder="Ask about pathogens, diseases, PAIS categories, mechanisms, or evidence..."
                                 class="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                                 onkeypress="if(event.key === 'Enter') sendChatMessage()">
                             <button onclick="openChatSettings()"
@@ -554,34 +547,34 @@
                     </div>
                 </div>
 
-                <!-- Relevant Papers Panel (desktop only) -->
+                <!-- Relevant Evidence Panel (desktop only) -->
                 <div class="hidden lg:flex lg:w-80 flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
                     <div class="flex-shrink-0 bg-purple-600 text-white px-6 py-4">
                         <h3 class="font-semibold text-lg">
-                            <i class="fas fa-file-alt mr-2"></i>Relevant Papers
+                            <i class="fas fa-file-alt mr-2"></i>Relevant Evidence
                         </h3>
-                        <p class="text-sm opacity-90">Papers used for the response</p>
+                        <p class="text-sm opacity-90">Evidence records used for the response</p>
                     </div>
                     <div id="chat-papers" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
                         <div class="text-center text-gray-500 dark:text-gray-400 py-8">
                             <i class="fas fa-inbox text-4xl mb-3 opacity-20"></i>
-                            <p class="text-sm">Ask a question to see relevant papers</p>
+                            <p class="text-sm">Ask a question to see relevant evidence records</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <!-- Interesting Papers Tab -->
+        <!-- Saved Records Tab -->
         <div id="interesting-tab" class="tab-content hidden">
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
                 <div class="flex justify-between items-start gap-6">
                     <!-- Left Column: Heading and Description -->
                     <div class="flex flex-col">
                         <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                            <i class="fas fa-star text-yellow-400 mr-2"></i>Interesting Papers
+                            <i class="fas fa-star text-yellow-400 mr-2"></i>Saved Records
                         </h2>
                         <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Papers you've rated are shown here, organized by session, priority, and poster number.
+                            Evidence records and articles you've rated are shown here.
                         </p>
                     </div>
                     <!-- Right Column: Controls -->
@@ -608,13 +601,13 @@
                                 </button>
                                 <button onclick="saveInterestingPapersAsJSON()"
                                     class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                                    title="Save rated papers as JSON file">
+                                    title="Save rated records as JSON file">
                                     <i class="fas fa-save mr-2"></i>Save JSON
                                 </button>
                             </div>
                             <button onclick="loadInterestingPapersFromJSON()"
                                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-green-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                                title="Load rated papers from JSON file">
+                                title="Load rated records from JSON file">
                                 <i class="fas fa-upload mr-2"></i>Load JSON
                             </button>
                         </div>
@@ -629,12 +622,12 @@
                 </div>
             </div>
 
-            <!-- Interesting Papers List -->
+            <!-- Saved Records List -->
             <div id="interesting-papers-list">
                 <div class="text-center text-gray-500 dark:text-gray-400 py-12">
                     <i class="fas fa-star text-6xl mb-4 opacity-20"></i>
-                    <p class="text-lg">No papers rated yet</p>
-                    <p class="text-sm">Rate papers using the stars to add them here</p>
+                    <p class="text-lg">No records rated yet</p>
+                    <p class="text-sm">Rate records using the stars to add them here</p>
                 </div>
             </div>
             <!-- Hidden file input for loading JSON -->
@@ -644,35 +637,35 @@
 
         <!-- Clusters Tab -->
         <div id="clusters-tab" class="tab-content hidden">
-            <!-- Papers Per Year Chart -->
+            <!-- PAISDB Articles Per Year Chart -->
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
                 <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                    <i class="fas fa-chart-bar text-purple-600 mr-2"></i>Papers Per Year
+                    <i class="fas fa-chart-bar text-purple-600 mr-2"></i>PAISDB Articles Per Year
                 </h3>
                 <div id="papers-per-year-plot" style="width: 100%; height: 250px;">
                     <div class="text-center text-gray-500 dark:text-gray-400 py-8">
                         <i class="fas fa-spinner fa-spin text-4xl mb-4 opacity-20"></i>
-                        <p class="text-sm">Loading papers per year...</p>
+                        <p class="text-sm">Loading PAISDB articles per year...</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Custom Topic Search Section -->
+            <!-- Custom Evidence Search Section -->
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
                 <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                    <i class="fas fa-search text-purple-600 mr-2"></i>Custom Topic Search
+                    <i class="fas fa-search text-purple-600 mr-2"></i>Custom Evidence Search
                 </h3>
                 <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    Enter a custom topic to identify papers within a specified distance in embedding space.
+                    Enter a custom topic to identify PAIS evidence records within a specified distance in embedding space.
                 </p>
                 <div class="flex gap-4 items-end">
                     <div class="flex-1">
                         <label for="custom-query-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Topic
+                            Evidence query
                         </label>
                         <input type="text" id="custom-query-input" 
                             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-                            placeholder="e.g., Uncertainty quantification"
+                            placeholder="e.g., persistent antigen after viral infection"
                             onkeypress="if(event.key === 'Enter') searchCustomCluster()">
                     </div>
                     <div class="w-48">
@@ -695,10 +688,10 @@
                 <div class="flex justify-between items-start gap-6">
                     <div class="flex flex-col">
                         <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                            <i class="fas fa-project-diagram text-purple-600 mr-2"></i>Embedding Clusters
+                            <i class="fas fa-project-diagram text-purple-600 mr-2"></i>PAIS Evidence Clusters
                         </h2>
                         <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Visualize papers clustered by their semantic embeddings using dimensionality reduction.
+                            Visualize PAIS evidence records clustered by their semantic embeddings using dimensionality reduction.
                         </p>
                     </div>
                     <div class="flex flex-col items-end space-y-2">
@@ -721,47 +714,29 @@
                 </div>
             </div>
 
-            <!-- Topic Evolution Plots (populated dynamically by custom topic searches) -->
+            <!-- Evidence Trend Plots (populated dynamically by custom searches) -->
             <div id="topic-evolution-container" class="hidden mt-6">
             </div>
 
-            <!-- Selected Paper Details -->
+            <!-- Selected Article Details -->
             <div id="selected-paper-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mt-6">
-                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Selected Paper</h3>
+                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Selected Article</h3>
                 <div id="selected-paper-content">
-                    <!-- Paper details will be populated here -->
+                    <!-- Article details will be populated here -->
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Footer -->
+    {% if imprint_link %}
     <footer class="bg-gray-800 dark:bg-gray-950 text-white mt-12">
-        <div class="container mx-auto px-4 py-3">
-            <div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-gray-300">
-                <span class="text-sm mx-2"><a href="https://github.com/thawn/abstracts-explorer"
-                        class="underline hover:text-gray-300" target="_blank" rel="noopener noreferrer">Abstracts Explorer</a>
-                    version {{ version }}</span>
-                {% if llm_backend and llm_backend.name %}
-                <span class="text-gray-500 mx-2" aria-hidden="true">|</span>
-                <span class="text-sm mx-2">LLM provided by
-                    <a href="{{ llm_backend.homepage }}" class="underline hover:text-gray-300" target="_blank"
-                        rel="noopener noreferrer">
-                        {% if llm_backend.logo %}
-                        <img src="{{ url_for('static', filename=llm_backend.logo) }}" alt="{{ llm_backend.name }} logo" class="inline-block h-4 w-auto align-middle">
-                        {% endif %}
-                        {{ llm_backend.name }}
-                    </a>
-                </span>
-                {% endif %}
-                {% if imprint_link %}
-                <p class="text-xs text-gray-400 mt-2"><a href="{{ imprint_link }}" class="underline hover:text-gray-300" target="_blank" rel="noopener noreferrer">Imprint</a></p>
-                {% endif %}
-            </div>
+        <div class="container mx-auto px-4 py-3 text-center">
+            <a href="{{ imprint_link }}" class="text-xs text-gray-400 underline hover:text-gray-300" target="_blank" rel="noopener noreferrer">Imprint</a>
         </div>
     </footer>
+    {% endif %}
 
-    <!-- Relevant Papers Modal (narrow screens only) -->
+    <!-- Relevant Evidence Modal (narrow screens only) -->
     <div id="papers-modal"
         class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden items-end lg:hidden"
         onclick="if(event.target===this) closePapersModal()">
@@ -769,20 +744,20 @@
             <div class="flex-shrink-0 bg-purple-600 text-white px-6 py-4 rounded-t-xl flex justify-between items-center">
                 <div>
                     <h3 class="font-semibold text-lg">
-                        <i class="fas fa-file-alt mr-2"></i>Relevant Papers
+                        <i class="fas fa-file-alt mr-2"></i>Relevant Evidence
                     </h3>
-                    <p class="text-sm opacity-90">Papers used for the response</p>
+                    <p class="text-sm opacity-90">Evidence records used for the response</p>
                 </div>
                 <button onclick="closePapersModal()"
                     class="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 focus:ring-2 focus:ring-white/50"
-                    aria-label="Close papers panel">
+                    aria-label="Close evidence panel">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div id="papers-modal-content" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
                 <div class="text-center text-gray-500 dark:text-gray-400 py-8">
                     <i class="fas fa-inbox text-4xl mb-3 opacity-20"></i>
-                    <p class="text-sm">Ask a question to see relevant papers</p>
+                    <p class="text-sm">Ask a question to see relevant evidence records</p>
                 </div>
             </div>
         </div>
@@ -807,9 +782,9 @@
                 <div class="space-y-4">
                     <div>
                         <label for="adv-topic" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Topic <span class="text-gray-400 dark:text-gray-500 font-normal">(semantic search)</span>
+                            Evidence query <span class="text-gray-400 dark:text-gray-500 font-normal">(semantic search)</span>
                         </label>
-                        <input type="text" id="adv-topic" placeholder="e.g. uncertainty quantification"
+                        <input type="text" id="adv-topic" placeholder="e.g. post-acute fatigue after Giardia"
                             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500">
                     </div>
                     <div>
@@ -844,7 +819,7 @@
                         <label for="adv-award" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Award
                         </label>
-                        <input type="text" id="adv-award" placeholder="e.g. Best Paper"
+                        <input type="text" id="adv-award" placeholder="e.g. high confidence"
                             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500">
                     </div>
                 </div>
@@ -899,7 +874,7 @@
                             </label>
                             <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
                                 Maximum embedding distance for a paper to appear in results.
-                                Lower values return fewer but more similar papers.
+                                Lower values return fewer but more similar evidence records.
                             </p>
                             <input type="number" id="distance-threshold-input"
                                 class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -907,17 +882,17 @@
                         </div>
                     </div>
 
-                    <!-- Chat-specific: Number of papers in context -->
+                    <!-- Chat-specific: Number of records in context -->
                     <div id="chat-settings-section" class="hidden">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Abstracts in context</label>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Evidence records in context</label>
                             <select id="n-papers"
                                 class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                                <option value="3">3 papers</option>
-                                <option value="5" selected>5 papers</option>
-                                <option value="10">10 papers</option>
-                                <option value="30">30 papers</option>
-                                <option value="50">50 papers</option>
+                                <option value="3">3 records</option>
+                                <option value="5" selected>5 records</option>
+                                <option value="10">10 records</option>
+                                <option value="30">30 records</option>
+                                <option value="50">50 records</option>
                             </select>
                         </div>
                     </div>

@@ -19,6 +19,7 @@ from chromadb.config import Settings
 
 from abstracts_explorer.config import get_config
 from abstracts_explorer.database import DatabaseManager, normalize_model_name
+from abstracts_explorer.provider_routing import normalize_openai_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,7 @@ class EmbeddingsManager:
                 transport = RateLimitedTransport(httpx.HTTPTransport(), self.requests_per_minute)
                 http_client = httpx.Client(transport=transport)
             self._openai_client = OpenAI(
-                base_url=f"{self.lm_studio_url}/v1",
+                base_url=normalize_openai_base_url(self.lm_studio_url),
                 api_key=self.llm_backend_auth_token or "lm-studio-local",
                 http_client=http_client,
             )
@@ -363,6 +364,37 @@ class EmbeddingsManager:
 
         except Exception as e:
             raise EmbeddingsError(f"Failed to generate embedding via OpenAI API: {str(e)}") from e
+
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts using the configured OpenAI-compatible API.
+
+        Parameters
+        ----------
+        texts : list of str
+            Texts to embed.
+
+        Returns
+        -------
+        list of list of float
+            One embedding per input text, preserving input order.
+        """
+        if not texts:
+            return []
+        if any(not text or not text.strip() for text in texts):
+            raise EmbeddingsError("Cannot generate embedding for empty text")
+
+        try:
+            response = self.openai_client.embeddings.create(model=self.model_name, input=texts)
+            embeddings = [item.embedding for item in response.data]
+            if len(embeddings) != len(texts):
+                raise EmbeddingsError(
+                    f"Embedding API returned {len(embeddings)} embeddings for {len(texts)} input texts"
+                )
+            return embeddings
+
+        except Exception as e:
+            raise EmbeddingsError(f"Failed to generate embeddings via OpenAI API: {str(e)}") from e
 
     def create_collection(self, reset: bool = False) -> None:
         """
@@ -991,7 +1023,8 @@ class EmbeddingsManager:
                 return []
             matching_uids = [p["uid"] for p in matching_papers]
         else:
-            # still check whether the remaining query matches any author names, even if there are no explicit field filters for authors
+            # Still check whether the remaining query matches author names,
+            # even without explicit field filters for authors.
             author_search_filters = {**field_filters, "authors": semantic_query}
             author_matches = database.search_papers(
                 field_filters=author_search_filters,

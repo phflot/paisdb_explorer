@@ -29,6 +29,7 @@ from abstracts_explorer.mcp_server import (
     get_paper_details as mcp_get_paper_details,
 )
 from abstracts_explorer.mcp_tools import format_tool_result_for_llm, _abbreviate_result
+from abstracts_explorer.provider_routing import PAIS_EVIDENCE_COLLECTION, normalize_openai_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ class RAGDeps:
     tool_results: List[Dict[str, Any]] = field(default_factory=list)
     conferences: List[str] = field(default_factory=list)
     years: List[int] = field(default_factory=list)
+    embeddings_manager: Any = None
+    database: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +121,28 @@ def _tool_search_papers(
     elif ctx.deps.conferences:
         kwargs["conference"] = ctx.deps.conferences[0]
 
-    logger.info("Tool call: search_papers(%s)", kwargs)
-    raw = mcp_search_papers(**kwargs)
+    if getattr(ctx.deps.embeddings_manager, "collection_name", "") == PAIS_EVIDENCE_COLLECTION:
+        from abstracts_explorer.pais_evidence_store import search_pais_evidence_semantic
+
+        logger.info("Tool call: search_pais_evidence(%s)", kwargs)
+        papers = search_pais_evidence_semantic(
+            query=topic_keywords,
+            database=ctx.deps.database,
+            embeddings_manager=ctx.deps.embeddings_manager,
+            limit=n_results,
+        )
+        raw = json.dumps(
+            {
+                "topic": topic_keywords,
+                "conference": "PAISDB",
+                "papers_found": len(papers),
+                "papers": papers,
+            },
+            indent=2,
+        )
+    else:
+        logger.info("Tool call: search_papers(%s)", kwargs)
+        raw = mcp_search_papers(**kwargs)
     logger.info("Tool result: search_papers → %s", _abbreviate_result(raw))
     ctx.deps.tool_results.append({"name": "search_papers", "raw_result": raw})
     return format_tool_result_for_llm("search_papers", raw)
@@ -412,6 +435,7 @@ class RAGChat:
         embeddings_manager,
         database,
         lm_studio_url: Optional[str] = None,
+        auth_token: Optional[str] = None,
         model: Optional[str] = None,
         max_context_papers: Optional[int] = None,
         temperature: Optional[float] = None,
@@ -426,6 +450,12 @@ class RAGChat:
         self.embeddings_manager = embeddings_manager
         self.database = database
         self.lm_studio_url = (lm_studio_url or config.llm_backend_url).rstrip("/")
+        self.auth_token = auth_token or getattr(
+            self.embeddings_manager,
+            "llm_backend_auth_token",
+            "",
+        )
+        self.auth_token = self.auth_token or config.llm_backend_auth_token
         self.model = model or config.chat_model
         self.max_context_papers = max_context_papers or config.max_context_papers
         self.temperature = temperature or config.chat_temperature
@@ -447,11 +477,12 @@ class RAGChat:
             Base instruction string without conference-specific context.
         """
         return (
-            "You are an AI assistant helping researchers analyze conference data. "
-            "Use the available tools to search for papers, analyze topics, and understand trends. "
+            "You are the PAISDB assistant helping researchers analyze article-level evidence for "
+            "post-acute infection syndrome pathogen-disease relationships. "
+            "Use the available tools to search PAIS evidence records and benchmark articles. "
             "Present the information in a clear, easy-to-understand format. "
             f"Today's date is {datetime.now().strftime('%Y-%m-%d')}. "
-            "When referencing specific papers, cite them using local links: "
+            "When referencing specific articles or evidence records, cite them using local links: "
             "<a href='#paper-1'>Paper-1</a>, <a href='#paper-2'>Paper-2</a>, etc."
         )
 
@@ -485,19 +516,23 @@ class RAGChat:
             conf_str = ", ".join(conferences)
             year_str = ", ".join(str(y) for y in years)
             context_parts.append(
-                f"Unless the user specifies otherwise, assume the default conference is "
-                f"{conf_str} and the default year is {year_str}."
+                f"Unless the user specifies otherwise, use the selected PAISDB source filter "
+                f"{conf_str} and publication year {year_str}."
             )
         elif conferences:
             conf_str = ", ".join(conferences)
-            context_parts.append(f"Unless the user specifies otherwise, assume the default conference is {conf_str}.")
+            context_parts.append(
+                f"Unless the user specifies otherwise, use the selected PAISDB source filter {conf_str}."
+            )
         elif years:
             year_str = ", ".join(str(y) for y in years)
-            context_parts.append(f"Unless the user specifies otherwise, assume the default year is {year_str}.")
+            context_parts.append(
+                f"Unless the user specifies otherwise, use the selected publication year {year_str}."
+            )
 
         if available_conferences:
             avail_str = ", ".join(available_conferences)
-            context_parts.append(f"The available conferences are: {avail_str}.")
+            context_parts.append(f"The available PAISDB source filters are: {avail_str}.")
 
         if context_parts:
             instructions += " " + " ".join(context_parts)
@@ -517,8 +552,8 @@ class RAGChat:
 
         # Create OpenAI-compatible model
         provider = OpenAIProvider(
-            base_url=f"{self.lm_studio_url}/v1",
-            api_key=config.llm_backend_auth_token or "lm-studio-local",
+            base_url=normalize_openai_base_url(self.lm_studio_url),
+            api_key=self.auth_token or "lm-studio-local",
         )
         ai_model = OpenAIChatModel(self.model, provider=provider)
 
@@ -610,6 +645,8 @@ class RAGChat:
             deps = RAGDeps(
                 conferences=conferences or [],
                 years=years or [],
+                embeddings_manager=self.embeddings_manager,
+                database=self.database,
             )
 
             # Model settings

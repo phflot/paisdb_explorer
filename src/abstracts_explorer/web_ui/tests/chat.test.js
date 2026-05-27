@@ -9,7 +9,20 @@ global.fetch = jest.fn();
 global.marked = { parse: jest.fn((text) => text), use: jest.fn() };
 global.Plotly = { newPlot: jest.fn() };
 
-import { sendChatMessage, displayChatPapers, addChatMessage, resetChat, renderChatVisualizations, openPapersModal, closePapersModal, handleChatFeedback, buildMcpToolsHintHtml, removeMcpToolsHint, initMcpToolsHint, _resetChatState } from '../static/modules/chat.js';
+import {
+    sendChatMessage,
+    displayChatPapers,
+    addChatMessage,
+    resetChat,
+    renderChatVisualizations,
+    openPapersModal,
+    closePapersModal,
+    handleChatFeedback,
+    buildMcpToolsHintHtml,
+    removeMcpToolsHint,
+    initMcpToolsHint,
+    _resetChatState,
+} from '../static/modules/chat.js';
 import * as State from '../static/modules/state.js';
 
 describe('Chat Module', () => {
@@ -135,7 +148,7 @@ describe('Chat Module', () => {
             displayChatPapers([]);
 
             const papers = document.getElementById('chat-papers');
-            expect(papers.innerHTML).toContain('No papers found');
+            expect(papers.innerHTML).toContain('No evidence records found');
         });
 
         it('should display papers with metadata', () => {
@@ -573,15 +586,15 @@ describe('Chat Module', () => {
         });
     });
 
-    describe('addChatMessage - feedback buttons', () => {
-        it('should show feedback buttons on assistant messages', () => {
+    describe('addChatMessage - feedback buttons removed', () => {
+        it('should not show feedback buttons on assistant messages', () => {
             addChatMessage('Test response', 'assistant');
 
             const messages = document.getElementById('chat-messages');
-            expect(messages.innerHTML).toContain('chat-feedback-buttons');
-            expect(messages.innerHTML).toContain('fa-thumbs-up');
-            expect(messages.innerHTML).toContain('fa-thumbs-down');
-            expect(messages.innerHTML).toContain('Helpful?');
+            expect(messages.innerHTML).not.toContain('chat-feedback-buttons');
+            expect(messages.innerHTML).not.toContain('fa-thumbs-up');
+            expect(messages.innerHTML).not.toContain('fa-thumbs-down');
+            expect(messages.innerHTML).not.toContain('Helpful?');
         });
 
         it('should not show feedback buttons on user messages', () => {
@@ -599,17 +612,15 @@ describe('Chat Module', () => {
             expect(messages.innerHTML).not.toContain('chat-feedback-buttons');
         });
 
-        it('should have data attributes on feedback buttons', () => {
+        it('should not render feedback button data attributes', () => {
             const messageId = addChatMessage('Test response', 'assistant');
 
             const msgDiv = document.getElementById(messageId);
             const upBtn = msgDiv.querySelector('[data-rating="up"]');
             const downBtn = msgDiv.querySelector('[data-rating="down"]');
 
-            expect(upBtn).not.toBeNull();
-            expect(downBtn).not.toBeNull();
-            expect(upBtn.dataset.msgId).toBe(messageId);
-            expect(downBtn.dataset.msgId).toBe(messageId);
+            expect(upBtn).toBeNull();
+            expect(downBtn).toBeNull();
         });
     });
 

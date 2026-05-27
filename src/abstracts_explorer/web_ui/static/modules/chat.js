@@ -57,15 +57,15 @@ export function buildMcpToolsHintHtml() {
                 </li>
                 <li class="flex items-start gap-2">
                     <i class="fas fa-search text-green-400 mt-0.5 flex-shrink-0"></i>
-                    <span><em>"Find papers about reinforcement learning at ICLR"</em></span>
+                    <span><em>"Find evidence records about Giardia and chronic fatigue"</em></span>
                 </li>
                 <li class="flex items-start gap-2">
                     <i class="fas fa-fire text-orange-400 mt-0.5 flex-shrink-0"></i>
-                    <span><em>"How relevant is uncertainty quantification at NeurIPS?"</em></span>
+                    <span><em>"Which pathogen-disease pairs have post-acute evidence?"</em></span>
                 </li>
                 <li class="flex items-start gap-2">
                     <i class="fas fa-info-circle text-indigo-400 mt-0.5 flex-shrink-0"></i>
-                    <span><em>"Who are the authors of the paper titled 'Large Language Diffusion Models'?"</em></span>
+                    <span><em>"What evidence do we have for persistent antigen mechanisms?"</em></span>
                 </li>
             </ul>
         </div>`;
@@ -231,7 +231,7 @@ export function displayChatPapers(papers, metadata = {}) {
 
     if (!papers || papers.length === 0) {
         const emptyHtml = renderEmptyState(
-            'No papers found for this query',
+            'No evidence records found for this query',
             '',
             'fa-inbox'
         );
@@ -248,7 +248,7 @@ export function displayChatPapers(papers, metadata = {}) {
         const wasRetrieved = metadata.retrieved_new_papers !== false;
         const cacheIcon = wasRetrieved ? 'fa-sync-alt' : 'fa-check-circle';
         const cacheColor = wasRetrieved ? 'text-blue-600' : 'text-green-600';
-        const cacheText = wasRetrieved ? 'Retrieved new papers' : 'Using cached papers';
+        const cacheText = wasRetrieved ? 'Retrieved new evidence records' : 'Using cached evidence records';
 
         html += `
             <div class="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4 mb-4 shadow-sm">
@@ -262,7 +262,7 @@ export function displayChatPapers(papers, metadata = {}) {
                 <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mt-2 pt-2 border-t border-purple-200 dark:border-purple-700">
                     <i class="fas ${cacheIcon} ${cacheColor}"></i>
                     <span>${cacheText}</span>
-                    <span class="ml-auto">${papers.length} paper${papers.length !== 1 ? 's' : ''} found</span>
+                    <span class="ml-auto">${papers.length} evidence record${papers.length !== 1 ? 's' : ''} found</span>
                 </div>
             </div>
         `;
@@ -323,19 +323,6 @@ export function addChatMessage(text, role, isLoading = false) {
             <div class="${bgColor} rounded-lg p-4 shadow-sm max-w-2xl">
                 <div data-chat-content>${contentHtml}</div>
                 ${isLoading ? '<div class="spinner mt-2" style="width: 20px; height: 20px; border-width: 2px;"></div>' : ''}
-                ${!isUser && !isLoading ? `
-                <div class="chat-feedback-buttons flex items-center gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-gray-600">
-                    <span class="text-s text-gray-500 dark:text-gray-400 mr-1">Helpful?</span>
-                    <button class="chat-feedback-btn text-gray-400 hover:text-green-600 transition-colors p-1"
-                        data-rating="up" data-msg-id="${messageId}" title="Thumbs up">
-                        <i class="fas fa-thumbs-up text-s"></i>
-                    </button>
-                    <button class="chat-feedback-btn text-gray-400 hover:text-red-600 transition-colors p-1"
-                        data-rating="down" data-msg-id="${messageId}" title="Thumbs down">
-                        <i class="fas fa-thumbs-down text-s"></i>
-                    </button>
-                </div>
-                ` : ''}
             </div>
             ${isUser ? `
                 <div class="flex-shrink-0 w-8 h-8 ${iconBg} rounded-full flex items-center justify-center text-white">
@@ -345,32 +332,8 @@ export function addChatMessage(text, role, isLoading = false) {
         </div>
     `;
 
-    // Attach click handlers for feedback buttons
-    if (!isUser && !isLoading) {
-        const feedbackBtns = messageDiv.querySelectorAll('.chat-feedback-btn');
-        feedbackBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                handleChatFeedback(btn.dataset.msgId, btn.dataset.rating);
-            });
-        });
-    }
-
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-    // Trigger a brief highlight + bounce animation on feedback buttons the first time they appear
-    if (!isUser && !isLoading && !_feedbackHighlightShown) {
-        _feedbackHighlightShown = true;
-        const feedbackDiv = messageDiv.querySelector('.chat-feedback-buttons');
-        if (feedbackDiv) {
-            feedbackDiv.classList.add('feedback-highlight');
-            const buttons = feedbackDiv.querySelectorAll('.chat-feedback-btn');
-            buttons.forEach((btn, index) => {
-                btn.style.animationDelay = `${index * 0.15 + 0.5}s`;
-                btn.classList.add('feedback-bounce');
-            });
-        }
-    }
 
     return messageId;
 }
@@ -387,7 +350,7 @@ export async function resetChat() {
 
         const messagesDiv = document.getElementById('chat-messages');
         messagesDiv.innerHTML = '';
-        addChatMessage('Conversation reset. How can I help you explore NeurIPS abstracts?', 'assistant');
+        addChatMessage('Conversation reset. How can I help you explore PAISDB evidence?', 'assistant');
 
         // Re-show the MCP tools hint
         _hasUserSentMessage = false;
@@ -395,7 +358,7 @@ export async function resetChat() {
 
         // Clear papers panel and modal
         const emptyHtml = renderEmptyState(
-            'Ask a question to see relevant papers',
+            'Ask a question to see relevant evidence records',
             '',
             'fa-inbox'
         );
@@ -573,7 +536,7 @@ function _renderClusterVisualizationChart(plotId, viz) {
     }));
 
     const stats = viz.statistics || {};
-    const title = `Cluster Visualization (${stats.total_papers || points.length} papers, ${stats.n_clusters || Object.keys(clusters).length} clusters)`;
+    const title = `PAIS Evidence Clusters (${stats.total_papers || points.length} records, ${stats.n_clusters || Object.keys(clusters).length} clusters)`;
 
     const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const fontColor = isDark ? '#e5e7eb' : '#374151';  // gray-200 vs gray-700

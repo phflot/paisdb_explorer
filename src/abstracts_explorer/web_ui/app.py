@@ -1,8 +1,8 @@
 """
-Flask web application for Abstracts Explorer.
+Flask web application for PAISDB Explorer.
 
-Provides a web interface for searching papers, chatting with RAG,
-and exploring the abstracts database.
+Provides a web interface for searching PAIS evidence, chatting with RAG,
+and exploring the PAISDB database.
 """
 
 import os
@@ -22,7 +22,17 @@ from abstracts_explorer.embeddings import EmbeddingsManager
 from abstracts_explorer.rag import RAGChat
 from abstracts_explorer.config import get_config
 from abstracts_explorer.export_utils import export_papers_to_zip
+from abstracts_explorer.pais_evidence_store import (
+    compute_pais_evidence_clusters,
+    count_pais_evidence_within_distance,
+    search_pais_evidence_semantic,
+)
 from abstracts_explorer.paper_utils import extract_top_keywords
+from abstracts_explorer.provider_routing import (
+    PAIS_EVIDENCE_COLLECTION,
+    resolve_chat_provider,
+    resolve_embedding_provider,
+)
 
 # Import version
 try:
@@ -159,10 +169,16 @@ def get_embeddings_manager():
     global embeddings_manager
     if embeddings_manager is None:
         config = get_config()  # Get config lazily
+        provider = resolve_embedding_provider(config)
         embeddings_manager = EmbeddingsManager(
-            lm_studio_url=config.llm_backend_url,
-            model_name=config.embedding_model,
-            collection_name=config.collection_name,
+            lm_studio_url=provider.base_url,
+            auth_token=provider.auth_token,
+            model_name=provider.model,
+            collection_name=(
+                PAIS_EVIDENCE_COLLECTION
+                if provider.source.startswith("pais_")
+                else config.collection_name
+            ),
         )
         embeddings_manager.connect()  # Connect to ChromaDB
         embeddings_manager.create_collection()  # Get or create the collection
@@ -183,12 +199,15 @@ def get_rag_chat():
 
     if rag_chat is None:
         config = get_config()  # Get config lazily
+        provider = resolve_chat_provider(config)
         em = get_embeddings_manager()
         rag_chat = RAGChat(
             embeddings_manager=em,
             database=database,  # Database is now required
-            lm_studio_url=config.llm_backend_url,
-            model=config.chat_model,
+            lm_studio_url=provider.base_url,
+            auth_token=provider.auth_token,
+            model=provider.model,
+            enable_mcp_tools=em.collection_name != PAIS_EVIDENCE_COLLECTION,
         )
     else:
         # Update database reference for this request
@@ -222,8 +241,8 @@ _LLM_BACKENDS: List[Dict[str, Any]] = [
     },
     {
         "url_fragments": ["localhost:1234", "127.0.0.1:1234"],
-        "name": "LM Studio",
-        "homepage": "https://lmstudio.ai",
+        "name": "OpenAI-compatible local endpoint",
+        "homepage": None,
         "logo": None,
     },
 ]
@@ -271,7 +290,7 @@ def index():
     str
         Rendered HTML template
     """
-    llm_backend = get_llm_backend_info(_config.llm_backend_url)
+    llm_backend = get_llm_backend_info(resolve_chat_provider(_config).base_url)
     return render_template(
         "index.html",
         version=__version__,
@@ -309,7 +328,7 @@ def conference_index(conference_name):
     if conference_name.startswith("."):
         abort(404)
 
-    llm_backend = get_llm_backend_info(_config.llm_backend_url)
+    llm_backend = get_llm_backend_info(resolve_chat_provider(_config).base_url)
     try:
         database = get_database()
         result = database.resolve_conference_for_url(conference_name)
@@ -408,7 +427,7 @@ def check_embedding_model():
 
         # Get the stored embedding model from the database
         stored_model = database.get_embedding_model()
-        current_model = config.embedding_model
+        current_model = resolve_embedding_provider(config).model
 
         # Check compatibility
         if stored_model is None:
@@ -560,15 +579,25 @@ def search():
             # Allow per-request override; fall back to the module-level default
             distance_threshold = float(data.get("distance_threshold", _SIMILAR_DISTANCE_THRESHOLD))
 
-            papers = em.search_papers_semantic(
-                query=query,
-                database=database,
-                limit=limit,
-                sessions=sessions,
-                years=years,
-                conferences=conferences,
-                distance_threshold=distance_threshold,
-            )
+            if em.collection_name == PAIS_EVIDENCE_COLLECTION:
+                papers = search_pais_evidence_semantic(
+                    query=query,
+                    database=database,
+                    embeddings_manager=em,
+                    limit=limit,
+                    distance_threshold=distance_threshold,
+                    years=[int(y) for y in years] if years else None,
+                )
+            else:
+                papers = em.search_papers_semantic(
+                    query=query,
+                    database=database,
+                    limit=limit,
+                    sessions=sessions,
+                    years=years,
+                    conferences=conferences,
+                    distance_threshold=distance_threshold,
+                )
 
             # Count total similar papers within distance threshold.
             # Parse field filters to determine the semantic portion of the query;
@@ -577,13 +606,22 @@ def search():
             _, remaining_query = DatabaseManager.parse_field_filters(query)
             if remaining_query:
                 try:
-                    total_similar = em.count_papers_within_distance(
-                        database=database,
-                        query=remaining_query,
-                        distance_threshold=distance_threshold,
-                        conferences=conferences if conferences else None,
-                        years=years if years else None,
-                    )
+                    if em.collection_name == PAIS_EVIDENCE_COLLECTION:
+                        total_similar = count_pais_evidence_within_distance(
+                            query=remaining_query,
+                            database=database,
+                            embeddings_manager=em,
+                            distance_threshold=distance_threshold,
+                            years=[int(y) for y in years] if years else None,
+                        )
+                    else:
+                        total_similar = em.count_papers_within_distance(
+                            database=database,
+                            query=remaining_query,
+                            distance_threshold=distance_threshold,
+                            conferences=conferences if conferences else None,
+                            years=years if years else None,
+                        )
                 except Exception:
                     total_similar = None
             else:
@@ -886,7 +924,16 @@ def compute_clusters():
         database = get_database()
 
         # Get current embedding model
-        current_model = config.embedding_model
+        current_model = resolve_embedding_provider(config).model
+
+        em = get_embeddings_manager()
+        if em.collection_name == PAIS_EVIDENCE_COLLECTION:
+            clusters = compute_pais_evidence_clusters(
+                database=database,
+                embeddings_manager=em,
+                years=[int(year) for year in years] if years else None,
+            )
+            return jsonify(clusters)
 
         # Fixed clustering parameters (only true clustering params, not conference/year)
         clustering_params = {"linkage": "ward", "distance_threshold": 150.0}
@@ -913,8 +960,8 @@ def compute_clusters():
         return (
             jsonify(
                 {
-                    "error": "No pre-computed clustering data available for this conference/year combination. "
-                    "Run 'abstracts-explorer clustering pre-generate' to generate clustering data.",
+                    "error": "No pre-computed PAISDB clustering data available. "
+                    "Use the PAISDB clustering compute path to generate evidence clusters.",
                 }
             ),
             404,
@@ -985,6 +1032,14 @@ def get_default_cluster_count():
         from abstracts_explorer.clustering import calculate_default_clusters
 
         em = get_embeddings_manager()
+        database = get_database()
+        if em.collection_name == PAIS_EVIDENCE_COLLECTION:
+            from abstracts_explorer.pais_evidence_store import ensure_pais_evidence_collection
+
+            n_papers = ensure_pais_evidence_collection(database, em)
+            from abstracts_explorer.clustering import calculate_default_clusters
+
+            return jsonify({"n_clusters": calculate_default_clusters(n_papers), "n_papers": n_papers})
 
         # Get embeddings count
         collection_stats = em.get_collection_stats()
@@ -1041,6 +1096,24 @@ def search_custom_cluster():
         # Get embeddings manager and database
         em = get_embeddings_manager()
         database = get_database()
+
+        if em.collection_name == PAIS_EVIDENCE_COLLECTION:
+            papers = search_pais_evidence_semantic(
+                query=query,
+                database=database,
+                embeddings_manager=em,
+                limit=100,
+                distance_threshold=distance_threshold,
+                years=[int(year) for year in years] if years else None,
+            )
+            return jsonify(
+                {
+                    "query": query,
+                    "distance": distance_threshold,
+                    "papers": papers,
+                    "count": len(papers),
+                }
+            )
 
         # Call EmbeddingsManager method directly
         results = em.find_papers_within_distance(
@@ -1383,7 +1456,7 @@ def run_server(host="127.0.0.1", port=5000, debug=False, dev=False, threads=6):
             raise FileNotFoundError(f"Database not found: {db_path}")
     # For PostgreSQL, we can't check file existence - connection will be validated at runtime
 
-    print("Starting Abstracts Explorer Web Interface...")
+    print("Starting PAISDB Explorer Web Interface...")
     print(f"Database: {config.database_url}")
 
     # Print embeddings configuration
@@ -1428,7 +1501,7 @@ def run_server(host="127.0.0.1", port=5000, debug=False, dev=False, threads=6):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Abstracts Explorer Web Interface")
+    parser = argparse.ArgumentParser(description="PAISDB Explorer Web Interface")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
     parser.add_argument("--port", type=int, default=5000, help="Port to bind to")
     parser.add_argument(

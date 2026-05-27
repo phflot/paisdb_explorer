@@ -93,11 +93,11 @@ export async function loadStats() {
         } else if (data.conference) {
             displayText = data.conference;
         } else {
-            displayText = 'All Papers';
+            displayText = 'All PAISDB records';
         }
 
         document.getElementById('stats').innerHTML = `
-            <div class="text-sm font-semibold">${data.total_papers.toLocaleString()} Abstracts</div>
+            <div class="text-sm font-semibold">${data.total_papers.toLocaleString()} Articles</div>
             <div class="text-xs opacity-90">${displayText}</div>
         `;
     } catch (error) {

@@ -1,10 +1,13 @@
 # PAISDB Evidence Pipeline
 
 This repository now includes a PAISDB evidence-building prototype for article-level pathogen-disease screening and extraction.
+The initial database-fill batch is the local 1000-row PAIS benchmark dataset from `paisdb2`/`paisdb_local`.
 
 ## Architecture
 
-The pipeline input is one article plus one pathogen candidate plus one disease or phenotype candidate. The first model call is always the benchmark-compatible PAIS screen. That screen preserves the historical output shape:
+The pipeline input is one article plus one pathogen candidate plus one disease or phenotype candidate. Candidate terms are hypotheses from benchmark rows, PubMed query provenance, metadata, or dictionary/ontology matching; they are not ground truth.
+
+The first model call is always the benchmark-compatible PAIS screen. That screen uses the original PAIS zero-shot prompt and preserves the historical output shape:
 
 ```json
 {"relationship": 1, "unrelated": 0}
@@ -16,9 +19,11 @@ or:
 {"relationship": 0, "unrelated": 1}
 ```
 
-The screen result is stored on `pais_candidate_relations` and as a `pais_model_runs` provenance row. Hosted enrichment models cannot overwrite this benchmark decision.
+The screen result is stored on `pais_candidate_relations` and as a `pais_model_runs` provenance row. Hosted enrichment models cannot overwrite this screen decision.
 
-High-confidence negative screens stop after storing the candidate relation and model run. Positive, uncertain, low-confidence, or explicitly adjudicated invalid screens continue to evidence brief generation and structured extraction.
+Negative screens stop after storing the candidate relation and model run. Positive, uncertain, low-confidence, or explicitly adjudicated invalid screens continue to evidence brief generation and structured extraction.
+
+Benchmark gold labels, when available, are stored only as QC/provenance metadata and used for agreement summaries. They are never included in model prompts.
 
 ## Model Routing
 
@@ -87,7 +92,19 @@ Run a built-in fixture:
 abstracts-explorer pais run-example giardia-positive
 ```
 
-Export evidence embedding texts:
+Ingest the local PAIS benchmark rows as the first database batch:
+
+```bash
+abstracts-explorer pais ingest-benchmark
+```
+
+Limit the run while testing model wiring:
+
+```bash
+abstracts-explorer pais ingest-benchmark --limit 10
+```
+
+Export evidence embedding texts. These texts are the stage-2 PAIS evidence brief text, not a deterministic re-rendering of the structured extraction:
 
 ```bash
 abstracts-explorer pais export-embedding-texts --output pais_embedding_texts.jsonl

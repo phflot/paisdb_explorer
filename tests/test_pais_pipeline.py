@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -11,7 +12,8 @@ from abstracts_explorer.database import DatabaseManager
 from abstracts_explorer.db_models import CandidateRelation, EmbeddingRecord, ModelRun, PAISEvidenceRecord
 from abstracts_explorer.pais_llm import PaisLLMResult
 from abstracts_explorer.pais_pipeline import render_embedding_text_from_extraction, run_candidate_pipeline
-from abstracts_explorer.pais_schemas import BenchmarkScreenResult, PAISEvidenceExtractionResult
+from abstracts_explorer.pais_prompts import build_benchmark_screen_messages
+from abstracts_explorer.pais_schemas import BenchmarkScreenResult, PAISEvidenceExtractionResult, PaisCandidateInput
 from tests.conftest import set_test_db
 
 
@@ -21,9 +23,11 @@ class FakePaisClient:
     def __init__(self, responses):
         self.responses = responses
         self.calls = []
+        self.structured_by_stage = {}
 
     def complete_json(self, messages, schema_model, stage, temperature=0.0, max_tokens=2048, structured=None):
         self.calls.append(stage)
+        self.structured_by_stage[stage] = structured
         response = self.responses[stage]
         if isinstance(response, PaisLLMResult):
             return response
@@ -44,6 +48,23 @@ def test_benchmark_screen_result_requires_inverse_labels():
         BenchmarkScreenResult(relationship=1, unrelated=1)
     with pytest.raises(ValueError):
         BenchmarkScreenResult(relationship=0, unrelated=0)
+
+
+def test_benchmark_screen_prompt_matches_paisdb2_paper_zero_shot_prompt():
+    prompt_file = Path(__file__).resolve().parents[2] / "paisdb2" / "src" / "paisdb2" / "prompts.py"
+    namespace = {}
+    exec(prompt_file.read_text(encoding="utf-8"), namespace)
+    candidate = _candidate()
+    expected = namespace["PAPER_ZERO_SHOT_V1"].format(
+        pathogen=candidate["pathogen"]["name"],
+        disease=candidate["disease"]["name"],
+        title=candidate["article"]["title"],
+        abstract=candidate["article"]["abstract"],
+    )
+
+    assert build_benchmark_screen_messages(PaisCandidateInput.model_validate(candidate)) == [
+        {"role": "user", "content": expected}
+    ]
 
 
 def test_high_confidence_negative_stops_after_screen(tmp_path):
@@ -73,6 +94,7 @@ def test_high_confidence_negative_stops_after_screen(tmp_path):
     assert summary["screen_status"] == "negative"
     assert summary["server2_called"] is False
     assert fake.calls == ["benchmark_screen"]
+    assert fake.structured_by_stage["benchmark_screen"] is False
 
 
 def test_positive_candidate_creates_evidence_and_pending_embedding(tmp_path):
@@ -99,6 +121,7 @@ def test_positive_candidate_creates_evidence_and_pending_embedding(tmp_path):
         assert relation.hosted_disagreement_flag is False
         assert [run.stage for run in runs] == ["benchmark_screen", "evidence_brief", "structured_extraction"]
         assert evidence.pais_category == "true_pais"
+        assert evidence.embedding_text == " ".join(_brief()["embedding_text"].split())
         assert embedding.status == "pending"
 
     assert summary["server2_called"] is True

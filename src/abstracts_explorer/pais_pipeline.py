@@ -48,6 +48,7 @@ def run_candidate_pipeline(
     database: DatabaseManager,
     llm_client: Optional[OpenAICompatiblePaisClient] = None,
     structured: Optional[bool] = None,
+    initial_quality_flags: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """Run the full PAIS candidate pipeline and persist provenance."""
     candidate = PaisCandidateInput.model_validate(candidate_data)
@@ -60,6 +61,8 @@ def run_candidate_pipeline(
         pathogen = _upsert_pathogen(session, candidate)
         disease = _upsert_disease(session, candidate)
         relation = _upsert_candidate_relation(session, article, pathogen, disease)
+        if initial_quality_flags:
+            _merge_relation_quality_flags(relation, initial_quality_flags)
 
         screen_call, screen_result, screen_messages = screen_candidate(candidate, client, structured=structured)
         screen_run = _persist_model_run(
@@ -77,6 +80,8 @@ def run_candidate_pipeline(
         model_run_ids = [screen_run.id]
         summary = {
             "candidate_relation_id": relation.id,
+            "benchmark_relationship": relation.benchmark_relationship,
+            "benchmark_unrelated": relation.benchmark_unrelated,
             "screen_status": screen_status.value,
             "screen_confidence": relation.screen_confidence,
             "server2_called": False,
@@ -180,7 +185,7 @@ def screen_candidate(
         stage=PaisStage.BENCHMARK_SCREEN.value,
         temperature=0.0,
         max_tokens=1024,
-        structured=structured,
+        structured=False,
     )
     result = BenchmarkScreenResult.model_validate(call.parsed_json) if call.valid and call.parsed_json else None
     return call, result, messages
@@ -224,9 +229,7 @@ def extract_evidence_record(
         structured=structured,
     )
     result = (
-        PAISEvidenceExtractionResult.model_validate(call.parsed_json)
-        if call.valid and call.parsed_json
-        else None
+        PAISEvidenceExtractionResult.model_validate(call.parsed_json) if call.valid and call.parsed_json else None
     )
     return call, result, messages
 
@@ -348,9 +351,7 @@ def _upsert_pathogen(session: Session, candidate: PaisCandidateInput) -> Pathoge
             select(Pathogen).where(Pathogen.ncbi_taxid == data.ncbi_taxid)
         ).scalar_one_or_none()
     if existing is None:
-        existing = (
-            session.execute(select(Pathogen).where(Pathogen.normalized_name == normalized)).scalars().first()
-        )
+        existing = session.execute(select(Pathogen).where(Pathogen.normalized_name == normalized)).scalars().first()
     pathogen = existing or Pathogen(name=data.name, normalized_name=normalized)
     pathogen.name = data.name
     pathogen.normalized_name = normalized
@@ -458,18 +459,18 @@ def _apply_screen_result(
 ) -> ScreenStatus:
     if screen_result is None:
         status = (
-            ScreenStatus.ERROR
-            if call.error_kind and call.error_kind != "validation_error"
-            else ScreenStatus.INVALID
+            ScreenStatus.ERROR if call.error_kind and call.error_kind != "validation_error" else ScreenStatus.INVALID
         )
         relation.screen_status = status.value
         relation.screen_confidence = Confidence.UNKNOWN.value
-        relation.quality_flags_json = _json_dumps(["invalid_benchmark_screen"])
+        flags = set(_json_loads(relation.quality_flags_json, default=[]))
+        flags.add("invalid_benchmark_screen")
+        relation.quality_flags_json = _json_dumps(sorted(flags))
         return status
 
     if screen_result.relationship == 1:
         status = ScreenStatus.POSITIVE
-    elif screen_result.confidence in (Confidence.LOW, Confidence.UNKNOWN):
+    elif screen_result.confidence == Confidence.LOW:
         status = ScreenStatus.UNCERTAIN
     else:
         status = ScreenStatus.NEGATIVE
@@ -481,8 +482,16 @@ def _apply_screen_result(
     relation.screen_exclusion_reason = (
         screen_result.exclusion_reason.value if screen_result.exclusion_reason else None
     )
-    relation.quality_flags_json = _json_dumps(screen_result.quality_flags)
+    flags = set(_json_loads(relation.quality_flags_json, default=[]))
+    flags.update(screen_result.quality_flags)
+    relation.quality_flags_json = _json_dumps(sorted(flags))
     return status
+
+
+def _merge_relation_quality_flags(relation: CandidateRelation, new_flags: list[str]) -> None:
+    flags = set(_json_loads(relation.quality_flags_json, default=[]))
+    flags.update(flag for flag in new_flags if flag)
+    relation.quality_flags_json = _json_dumps(sorted(flags))
 
 
 def _should_call_hosted(
@@ -494,7 +503,7 @@ def _should_call_hosted(
         return True
     if status in (ScreenStatus.INVALID, ScreenStatus.ERROR):
         return allow_invalid_adjudication
-    if screen_result and screen_result.confidence in (Confidence.LOW, Confidence.UNKNOWN):
+    if screen_result and screen_result.confidence == Confidence.LOW:
         return True
     return False
 
@@ -551,8 +560,7 @@ def _create_evidence_record(
     brief: PAISEvidenceBriefResult,
     extraction: PAISEvidenceExtractionResult,
 ) -> PAISEvidenceRecord:
-    deterministic_text = render_embedding_text_from_extraction(extraction)
-    embedding_text = deterministic_text or render_embedding_text_from_brief(brief)
+    embedding_text = render_embedding_text_from_brief(brief)
     record = PAISEvidenceRecord(
         candidate_relation_id=relation.id,
         host_context_id=host_context.id if host_context else None,

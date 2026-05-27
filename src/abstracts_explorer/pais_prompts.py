@@ -32,33 +32,36 @@ class PromptSpec:
 
 
 BENCHMARK_SCREEN_PROMPT = PromptSpec(
-    name="pais_benchmark_screen",
-    version="2026-05-27-v1",
-    system=(
-        "You are a biomedical relation-classification assistant for PAISDB. "
-        "Use only the provided title and abstract. Do not use external knowledge. "
-        "Your task is to decide whether the article supports a relationship between "
-        "the specified pathogen and disease/phenotype candidate. Return only the requested JSON object."
-    ),
+    name="paper_zero_shot_v1",
+    version="paisdb2-paper-zero-shot-v1",
+    system="",
     user=(
-        "Pathogen candidate:\n{name_pathogen}\n\n"
-        "Disease or phenotype candidate:\n{name_disease}\n\n"
-        "Title:\n{title}\n\n"
-        "Abstract:\n{abstract}\n\n"
-        "Question:\n"
-        "Does this title/abstract support a relationship between the specified pathogen and the specified "
-        "disease/phenotype?\n\n"
-        "Decision rules:\n"
-        "1. Return relationship=1 and unrelated=0 if the text investigates or states evidence connecting "
-        "this pathogen to this disease/phenotype.\n"
-        "2. Return relationship=0 and unrelated=1 if the text only co-mentions them, lists them without "
-        "relation evidence, or does not discuss the specified pair.\n"
-        "3. Do not infer a relation from substring overlap. If the disease term appears only inside a pathogen "
-        "name, such as Japanese encephalitis virus containing encephalitis, this is not sufficient.\n"
-        "4. Use only the title and abstract. Do not add outside knowledge.\n"
-        "5. Include short evidence-span quotes from the title/abstract when possible.\n"
-        "6. Keep the rationale short.\n\n"
-        "Return JSON matching the BenchmarkScreenResult schema."
+        "I seek assistance with a systematic review focused on the direct relationship between pathogens and "
+        "diseases, specifically {disease}. I’ll provide the title and abstract of a particular journal article "
+        "and would appreciate an assessment for its inclusion based on the following criteria:\n\n"
+        "1. The title or abstract provides sufficient evidence of a direct relationship between the disease "
+        "({disease}) and the pathogen ({pathogen}).\n"
+        "2. The title or abstract investigates the Pathogen ({pathogen}) and reports evidence for the Disease "
+        "({disease}).\n"
+        "3. The title or abstract investigates the Disease ({disease}) and reports evidence for the Pathogen "
+        "({pathogen}).\n"
+        "4. The title or abstract states the association between the Pathogen ({pathogen}) and the Disease "
+        "({disease}), but does not focus on it.\n"
+        "5. The title and abstract present data or findings supporting this association.\n\n"
+        "Exclusion criteria:\n"
+        "1. The title and abstract do not provide sufficient evidence of a direct relationship between the "
+        "disease ({disease}) and the pathogen ({pathogen}).\n\n"
+        "Please provide the assessment in the following dictionary format:\n"
+        '{{"relationship": 1, "unrelated": 0}} if there is a relationship, or '
+        '{{"relationship": 0, "unrelated": 1}} if the study should be excluded.\n\n'
+        "Note: only one value can be 1 at a time.\n\n"
+        "Title: {title}\n\n"
+        "Abstract: {abstract}\n\n"
+        "You are required to classify a journal article based solely on the given title and abstract. Do not "
+        "use any external knowledge or assumptions beyond the text provided. Your decision must be strictly "
+        "based on the information within the title and abstract.\n\n"
+        "Respond only in the dictionary format with no explanation.\n\n"
+        "Answer:"
     ),
 )
 
@@ -68,13 +71,12 @@ EVIDENCE_BRIEF_PROMPT = PromptSpec(
     version="2026-05-27-v1",
     system=(
         "You create compact, source-grounded PAIS evidence briefs for embedding and retrieval. "
-        "Use only the supplied article text and benchmark screen result. Return only JSON."
+        "Use only the supplied article text and candidate relation context. Return only JSON."
     ),
     user=(
         "Article metadata:\n{article_json}\n\n"
         "Pathogen candidate:\n{pathogen_json}\n\n"
         "Disease or phenotype candidate:\n{disease_json}\n\n"
-        "Benchmark screen result:\n{screen_json}\n\n"
         "Title:\n{title}\n\n"
         "Abstract:\n{abstract}\n\n"
         "Create a compact PAIS evidence brief. Include pathogen, disease/phenotype, host, timing after "
@@ -83,9 +85,9 @@ EVIDENCE_BRIEF_PROMPT = PromptSpec(
         "information is not in the source text. Keep source quotes short.\n\n"
         "The embedding_text should follow this shape:\n"
         "PAIS evidence brief. Article: <title or PMID>. Candidate relation: <pathogen> -> <disease>. "
-        "Benchmark screen: <positive/uncertain; confidence>. Host/model: <...>. Timing: <...>. "
-        "Evidence type: <...>. Finding: <...>. PAIS category: <...>. Mechanism: <...>. "
-        "Molecular data: <...>. Limitations/uncertainty: <...>. Source support: <...>.\n\n"
+        "Host/model: <...>. Timing: <...>. Evidence type: <...>. Finding: <...>. "
+        "PAIS category: <...>. Mechanism: <...>. Molecular data: <...>. "
+        "Limitations/uncertainty: <...>. Source support: <...>.\n\n"
         "Return JSON matching the PAISEvidenceBriefResult schema."
     ),
 )
@@ -102,14 +104,12 @@ STRUCTURED_EXTRACTION_PROMPT = PromptSpec(
         "Article metadata:\n{article_json}\n\n"
         "Pathogen candidate:\n{pathogen_json}\n\n"
         "Disease or phenotype candidate:\n{disease_json}\n\n"
-        "Benchmark screen result:\n{screen_json}\n\n"
         "Evidence brief:\n{brief_json}\n\n"
         "Title:\n{title}\n\n"
         "Abstract:\n{abstract}\n\n"
         "Fill PAISEvidenceExtractionResult. Use enum values from the schema. Keep the extraction "
-        "source-grounded. Source spans should be snippets from the title, abstract, or brief. If the "
-        "extraction disagrees with the benchmark screen, set disagreement_with_screen=true and add a "
-        "quality flag. Do not overwrite the benchmark screen decision.\n\n"
+        "source-grounded. Source spans should be snippets from the title, abstract, or brief. Do not "
+        "invent values that are not supported by the supplied text.\n\n"
         "Return JSON matching the PAISEvidenceExtractionResult schema."
     ),
 )
@@ -135,15 +135,16 @@ def schema_sha256(schema_model: type[BaseModel]) -> str:
 def build_benchmark_screen_messages(candidate: PaisCandidateInput) -> list[dict[str, str]]:
     """Build chat messages for the benchmark screen stage."""
     user = BENCHMARK_SCREEN_PROMPT.user.format(
-        name_pathogen=_entity_display(candidate.pathogen.model_dump(mode="json")),
-        name_disease=_entity_display(candidate.disease.model_dump(mode="json")),
+        pathogen=candidate.pathogen.name,
+        disease=candidate.disease.name,
         title=candidate.article.title,
         abstract=candidate.article.abstract,
     )
-    return [
-        {"role": "system", "content": BENCHMARK_SCREEN_PROMPT.system},
-        {"role": "user", "content": user},
-    ]
+    messages = []
+    if BENCHMARK_SCREEN_PROMPT.system:
+        messages.append({"role": "system", "content": BENCHMARK_SCREEN_PROMPT.system})
+    messages.append({"role": "user", "content": user})
+    return messages
 
 
 def build_evidence_brief_messages(
@@ -154,7 +155,6 @@ def build_evidence_brief_messages(
         article_json=canonical_json(candidate.article),
         pathogen_json=canonical_json(candidate.pathogen),
         disease_json=canonical_json(candidate.disease),
-        screen_json=canonical_json(screen_result),
         title=candidate.article.title,
         abstract=candidate.article.abstract,
     )
@@ -174,7 +174,6 @@ def build_structured_extraction_messages(
         article_json=canonical_json(candidate.article),
         pathogen_json=canonical_json(candidate.pathogen),
         disease_json=canonical_json(candidate.disease),
-        screen_json=canonical_json(screen_result),
         brief_json=canonical_json(brief_result),
         title=candidate.article.title,
         abstract=candidate.article.abstract,
@@ -205,9 +204,3 @@ def schema_for_stage(stage: str) -> type[BaseModel]:
     if stage == "structured_extraction":
         return PAISEvidenceExtractionResult
     raise ValueError(f"Unknown PAIS stage: {stage}")
-
-
-def _entity_display(entity: dict[str, Any]) -> str:
-    name = entity.get("name", "")
-    identifiers = {key: value for key, value in entity.items() if key != "synonyms" and value}
-    return f"{name}\n{canonical_json(identifiers)}"

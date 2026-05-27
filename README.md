@@ -124,9 +124,10 @@ PAISDB candidate screening and article-level evidence extraction is available un
 abstracts-explorer pais init-db
 abstracts-explorer pais smoke --no-network
 abstracts-explorer pais run-example giardia-positive
+abstracts-explorer pais ingest-benchmark --limit 10
 ```
 
-The local Mistral-Small-Instruct-2409 benchmark screen is the gatekeeper. Hosted Server 2 models are used only for evidence enrichment and structured extraction after a positive or uncertain screen.
+The local Mistral-Small-Instruct-2409 benchmark screen is the gatekeeper. The 1000-row PAIS benchmark can be ingested as the first database-fill batch; its gold labels are used for QC summaries, not as model prompt input. Hosted Server 2 models are used only for evidence enrichment and structured extraction after a positive or uncertain screen.
 `pais init-db` does not require model configuration; candidate runs require the `PAIS_*_MODEL` and `PAIS_*_BASE_URL` settings to be supplied first.
 
 📖 See [PAISDB Evidence Pipeline](docs/pais_pipeline.md) for model routing, schemas, provenance, and run commands.

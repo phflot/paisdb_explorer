@@ -38,3 +38,18 @@ def test_pais_init_db(tmp_path, capsys):
         assert main() == 0
     captured = capsys.readouterr()
     assert "PAIS tables are ready" in captured.out
+
+
+def test_pais_ingest_benchmark_command(capsys):
+    expected = {"processed": 1, "screen_status_counts": {"negative": 1}}
+    with patch("abstracts_explorer.pais_cli.ingest_benchmark_dataset", return_value=expected) as ingest:
+        with patch.object(
+            sys,
+            "argv",
+            ["abstracts-explorer", "pais", "ingest-benchmark", "--input", "benchmark.csv", "--limit", "1"],
+        ):
+            assert main() == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == expected
+    assert ingest.call_args.kwargs["input_path"] == "benchmark.csv"
+    assert ingest.call_args.kwargs["limit"] == 1

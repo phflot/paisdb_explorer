@@ -14,6 +14,7 @@ from sqlalchemy import select
 from abstracts_explorer.config import get_config
 from abstracts_explorer.database import DatabaseManager
 from abstracts_explorer.db_models import EmbeddingRecord, PAISEvidenceRecord
+from abstracts_explorer.pais_benchmark_ingest import default_benchmark_input_path, ingest_benchmark_dataset
 from abstracts_explorer.pais_examples import EXAMPLES, get_example
 from abstracts_explorer.pais_llm import _api_url
 from abstracts_explorer.pais_pipeline import embed_pending_records, run_candidate_pipeline
@@ -48,14 +49,30 @@ def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
         help="Disable provider-native JSON schema mode",
     )
 
-    export_parser = pais_subparsers.add_parser(
-        "export-embedding-texts", help="Export PAIS embedding texts as JSONL"
-    )
+    export_parser = pais_subparsers.add_parser("export-embedding-texts", help="Export PAIS embedding texts as JSONL")
     export_parser.add_argument("--output", type=str, default=None, help="Output JSONL path; defaults to stdout")
     export_parser.add_argument("--limit", type=int, default=None, help="Maximum number of records to export")
 
     embed_parser = pais_subparsers.add_parser("embed-pending", help="Embed pending PAIS evidence records")
     embed_parser.add_argument("--limit", type=int, default=100, help="Maximum pending records to process")
+
+    ingest_parser = pais_subparsers.add_parser(
+        "ingest-benchmark",
+        help="Ingest the local PAIS benchmark rows as PAISDB Explorer candidate/evidence records",
+    )
+    ingest_parser.add_argument(
+        "--input",
+        type=str,
+        default=str(default_benchmark_input_path()),
+        help="Benchmark CSV path",
+    )
+    ingest_parser.add_argument("--limit", type=int, default=None, help="Maximum rows to ingest")
+    ingest_parser.add_argument("--output", type=str, default=None, help="Write ingestion summary JSON to this path")
+    ingest_parser.add_argument(
+        "--no-structured",
+        action="store_true",
+        help="Disable provider-native JSON schema mode for enrichment stages",
+    )
 
     smoke_parser = pais_subparsers.add_parser("smoke", help="Inspect configured PAIS model endpoints")
     smoke_parser.add_argument(
@@ -82,6 +99,13 @@ def pais_command(args: argparse.Namespace) -> int:
         return _export_embedding_texts_command(output=args.output, limit=args.limit)
     if args.pais_command == "embed-pending":
         return _embed_pending_command(limit=args.limit)
+    if args.pais_command == "ingest-benchmark":
+        return _ingest_benchmark_command(
+            input_path=args.input,
+            limit=args.limit,
+            output=args.output,
+            structured=not args.no_structured,
+        )
     if args.pais_command == "smoke":
         return _smoke_command(no_network=args.no_network)
 
@@ -102,11 +126,7 @@ def _add_candidate_args(parser: argparse.ArgumentParser) -> None:
 def _candidate_from_args(args: argparse.Namespace) -> dict[str, Any]:
     if args.input_json:
         return json.loads(Path(args.input_json).read_text(encoding="utf-8"))
-    missing = [
-        name
-        for name in ("title", "abstract", "pathogen", "disease")
-        if not getattr(args, name, None)
-    ]
+    missing = [name for name in ("title", "abstract", "pathogen", "disease") if not getattr(args, name, None)]
     if missing:
         raise SystemExit(f"Missing required candidate fields: {', '.join(missing)}")
     return {
@@ -170,6 +190,23 @@ def _embed_pending_command(limit: int) -> int:
     with DatabaseManager() as database:
         summary = embed_pending_records(database=database, limit=limit)
     _write_json(summary, None)
+    return 0
+
+
+def _ingest_benchmark_command(
+    input_path: str,
+    limit: Optional[int],
+    output: Optional[str],
+    structured: bool,
+) -> int:
+    with DatabaseManager() as database:
+        summary = ingest_benchmark_dataset(
+            database=database,
+            input_path=input_path,
+            limit=limit,
+            structured=structured,
+        )
+    _write_json(summary, output)
     return 0
 
 

@@ -12,6 +12,7 @@ from tests.conftest import set_test_db
 
 def _pais_config(**overrides):
     values = {
+        "pais_screen_backend": "openai_compatible",
         "pais_screen_model": "",
         "pais_screen_base_url": "",
         "pais_screen_auth_token": "",
@@ -102,6 +103,23 @@ def test_pais_status_endpoint_returns_sanitized_configuration():
     assert "api_key" not in serialized
     assert "access_token" not in serialized
     assert "authorization" not in serialized
+
+
+def test_pais_status_endpoint_marks_local_hf_screen_configured():
+    flask_app.config["TESTING"] = True
+    config = _pais_config(
+        pais_screen_backend="hf_transformers",
+        pais_screen_model="mistralai/Mistral-Small-Instruct-2409",
+    )
+
+    with patch("abstracts_explorer.web_ui.app.get_config", return_value=config):
+        with flask_app.test_client() as client:
+            response = client.get("/api/pais/status")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["pais_screen_configured"] is True
+    assert data["configured_base_urls"]["screen"] == ""
 
 
 def test_pais_status_endpoint_marks_unconfigured_stages():

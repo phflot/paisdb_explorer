@@ -122,6 +122,14 @@ def _stage_configured(model: str, base_url: str) -> bool:
     return bool(model and base_url)
 
 
+def _screen_stage_configured(config) -> bool:
+    """Return screen readiness for both local HF and URL-backed deployments."""
+    backend = getattr(config, "pais_screen_backend", "openai_compatible")
+    if backend == "hf_transformers":
+        return bool(config.pais_screen_model)
+    return _stage_configured(config.pais_screen_model, config.pais_screen_base_url)
+
+
 def get_database():
     """
     Get or create database connection (thread-local using Flask g).
@@ -815,10 +823,7 @@ def pais_status():
     config = get_config()
     return jsonify(
         {
-            "pais_screen_configured": _stage_configured(
-                config.pais_screen_model,
-                config.pais_screen_base_url,
-            ),
+            "pais_screen_configured": _screen_stage_configured(config),
             "pais_evidence_brief_configured": _stage_configured(
                 config.pais_evidence_brief_model,
                 config.pais_evidence_brief_base_url,

@@ -15,6 +15,16 @@ from pydantic import BaseModel, ValidationError
 from abstracts_explorer.config import get_config
 from abstracts_explorer.pais_prompts import canonical_json
 from abstracts_explorer.pais_schemas import PaisStage
+from abstracts_explorer.provider_routing import resolve_generation_provider, resolve_generation_provider_chain
+
+_FALLBACK_ERROR_KINDS = {
+    "ConnectionError",
+    "ConnectError",
+    "HTTPError",
+    "ReadTimeout",
+    "RequestException",
+    "Timeout",
+}
 
 
 @dataclass(frozen=True)
@@ -59,7 +69,7 @@ class OpenAICompatiblePaisClient:
         self.timeout_s = timeout_s
         self._hf_models: dict[tuple[Any, ...], tuple[Any, Any]] = {}
 
-    def resolve_stage_config(self, stage: str) -> PaisStageConfig:
+    def resolve_stage_config(self, stage: str, generation_provider_id: str | None = None) -> PaisStageConfig:
         """Resolve backend/model/base URL for a PAIS stage from config."""
         if stage == PaisStage.BENCHMARK_SCREEN.value:
             backend = self.config.pais_screen_backend
@@ -69,17 +79,25 @@ class OpenAICompatiblePaisClient:
             model_var = "PAIS_SCREEN_MODEL"
             base_url_var = "PAIS_SCREEN_BASE_URL"
         elif stage == PaisStage.EVIDENCE_BRIEF.value:
-            model = self.config.pais_evidence_brief_model
-            base_url = self.config.pais_evidence_brief_base_url
-            token = self.config.pais_evidence_brief_auth_token
-            model_var = "PAIS_EVIDENCE_BRIEF_MODEL"
-            base_url_var = "PAIS_EVIDENCE_BRIEF_BASE_URL"
+            provider = resolve_generation_provider(self.config, provider_id=generation_provider_id, stage=stage)
+            return PaisStageConfig(
+                stage=stage,
+                backend="openai_compatible",
+                model=provider.model,
+                base_url=provider.base_url,
+                auth_token=provider.auth_token or self.config.llm_backend_auth_token,
+                endpoint_id=_endpoint_id(provider.base_url),
+            )
         elif stage == PaisStage.STRUCTURED_EXTRACTION.value:
-            model = self.config.pais_extraction_model
-            base_url = self.config.pais_extraction_base_url
-            token = self.config.pais_extraction_auth_token
-            model_var = "PAIS_EXTRACTION_MODEL"
-            base_url_var = "PAIS_EXTRACTION_BASE_URL"
+            provider = resolve_generation_provider(self.config, provider_id=generation_provider_id, stage=stage)
+            return PaisStageConfig(
+                stage=stage,
+                backend="openai_compatible",
+                model=provider.model,
+                base_url=provider.base_url,
+                auth_token=provider.auth_token or self.config.llm_backend_auth_token,
+                endpoint_id=_endpoint_id(provider.base_url),
+            )
         else:
             raise ValueError(f"Unknown PAIS stage: {stage}")
 
@@ -153,19 +171,27 @@ class OpenAICompatiblePaisClient:
         temperature: float = 0.0,
         max_tokens: int = 2048,
         structured: Optional[bool] = None,
+        generation_provider_id: str | None = None,
     ) -> PaisLLMResult:
         """Call a stage model and validate JSON against the supplied schema."""
-        stage_config = self.resolve_stage_config(stage)
         structured_mode = self.config.pais_structured_output_mode
         structured_output = structured if structured is not None else structured_mode == "json_schema"
-        return self._chat_completion(
-            stage_config=stage_config,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            schema_model=schema_model,
-            structured=structured_output,
-        )
+        stage_configs = self._stage_config_candidates(stage, generation_provider_id)
+        last_result: PaisLLMResult | None = None
+        for stage_config in stage_configs:
+            result = self._chat_completion(
+                stage_config=stage_config,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                schema_model=schema_model,
+                structured=structured_output,
+            )
+            last_result = result
+            if result.valid or result.error_kind not in _FALLBACK_ERROR_KINDS:
+                return result
+        assert last_result is not None
+        return last_result
 
     def complete_json_batch(
         self,
@@ -175,6 +201,7 @@ class OpenAICompatiblePaisClient:
         temperature: float = 0.0,
         max_tokens: int = 2048,
         structured: Optional[bool] = None,
+        generation_provider_id: str | None = None,
     ) -> list[PaisLLMResult]:
         """Call a stage model for many independent JSON prompts.
 
@@ -184,7 +211,7 @@ class OpenAICompatiblePaisClient:
         """
         if not messages_batch:
             return []
-        stage_config = self.resolve_stage_config(stage)
+        stage_config = self.resolve_stage_config(stage, generation_provider_id=generation_provider_id)
         structured_mode = self.config.pais_structured_output_mode
         structured_output = structured if structured is not None else structured_mode == "json_schema"
         if stage_config.backend == "hf_transformers":
@@ -204,6 +231,30 @@ class OpenAICompatiblePaisClient:
                 structured=structured_output,
             )
             for messages in messages_batch
+        ]
+
+    def _stage_config_candidates(
+        self,
+        stage: str,
+        generation_provider_id: str | None,
+    ) -> list[PaisStageConfig]:
+        if stage not in {PaisStage.EVIDENCE_BRIEF.value, PaisStage.STRUCTURED_EXTRACTION.value}:
+            return [self.resolve_stage_config(stage, generation_provider_id=generation_provider_id)]
+        if generation_provider_id and generation_provider_id != "auto":
+            return [self.resolve_stage_config(stage, generation_provider_id=generation_provider_id)]
+        chain = resolve_generation_provider_chain(self.config, provider_id=generation_provider_id or "auto", stage=stage)
+        if not chain:
+            return [self.resolve_stage_config(stage, generation_provider_id=generation_provider_id)]
+        return [
+            PaisStageConfig(
+                stage=stage,
+                backend="openai_compatible",
+                model=provider.model,
+                base_url=provider.base_url,
+                auth_token=provider.auth_token or self.config.llm_backend_auth_token,
+                endpoint_id=_endpoint_id(provider.base_url),
+            )
+            for provider in chain
         ]
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:

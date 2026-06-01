@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import requests
 from flask import Flask, render_template, request, jsonify, g, send_file, abort
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -34,8 +35,11 @@ from abstracts_explorer.pais_evidence_store import (
 from abstracts_explorer.paper_utils import extract_top_keywords
 from abstracts_explorer.provider_routing import (
     PAIS_EVIDENCE_COLLECTION,
-    resolve_chat_provider,
+    load_generation_providers,
+    provider_status_payload,
     resolve_embedding_provider,
+    resolve_generation_provider,
+    resolve_generation_provider_chain,
 )
 
 # Import version
@@ -78,7 +82,7 @@ app.wsgi_app = ProxyFix(  # type: ignore[assignment]
 
 # Initialize components (lazy loading)
 embeddings_manager = None
-rag_chat = None
+rag_chats: dict[str, RAGChat] = {}
 
 
 _SENSITIVE_URL_QUERY_KEYS = {
@@ -144,6 +148,51 @@ def _screen_stage_configured(config) -> bool:
     return _stage_configured(config.pais_screen_model, config.pais_screen_base_url)
 
 
+def _generation_provider_availability(config) -> dict[str, dict[str, Any]]:
+    """Return short /v1/models availability checks for configured generation providers."""
+    checks: dict[str, dict[str, Any]] = {}
+    for provider_id, provider in load_generation_providers(config).items():
+        if not provider.enabled:
+            checks[provider_id] = {"available": False, "reason": "disabled"}
+            continue
+        headers = {"Authorization": f"Bearer {provider.auth_token}"} if provider.auth_token else {}
+        try:
+            response = requests.get(
+                f"{provider.base_url.rstrip('/')}/models",
+                headers=headers,
+                timeout=2,
+            )
+            if not response.ok:
+                checks[provider_id] = {
+                    "available": False,
+                    "status_code": response.status_code,
+                    "reason": "models_endpoint_error",
+                }
+                continue
+            payload = response.json()
+            served = _models_payload_contains(payload, provider.model)
+            checks[provider_id] = {
+                "available": served,
+                "status_code": response.status_code,
+                "reason": "model_served" if served else "model_not_listed",
+            }
+        except Exception as exc:
+            checks[provider_id] = {
+                "available": False,
+                "reason": exc.__class__.__name__,
+                "error": str(exc),
+            }
+    return checks
+
+
+def _models_payload_contains(payload: dict[str, Any], model: str) -> bool:
+    models = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        return False
+    names = {str(item.get("id") or item.get("model") or "") for item in models if isinstance(item, dict)}
+    return model in names
+
+
 def get_database():
     """
     Get or create database connection (thread-local using Flask g).
@@ -189,7 +238,7 @@ def get_embeddings_manager():
     return embeddings_manager
 
 
-def get_rag_chat():
+def get_rag_chat(provider_id: str | None = None, provider=None):
     """
     Get or create RAG chat instance.
 
@@ -198,14 +247,15 @@ def get_rag_chat():
     RAGChat
         RAG chat instance
     """
-    global rag_chat
+    global rag_chats
     database = get_database()  # Get database connection first (required)
+    config = get_config()  # Get config lazily
+    provider = provider or resolve_generation_provider(config, provider_id=provider_id, stage="chat")
+    cache_key = provider.provider_id or f"{provider.source}:{provider.base_url}:{provider.model}"
 
-    if rag_chat is None:
-        config = get_config()  # Get config lazily
-        provider = resolve_chat_provider(config)
+    if cache_key not in rag_chats:
         em = get_embeddings_manager()
-        rag_chat = RAGChat(
+        rag_chats[cache_key] = RAGChat(
             embeddings_manager=em,
             database=database,  # Database is now required
             lm_studio_url=provider.base_url,
@@ -215,9 +265,9 @@ def get_rag_chat():
         )
     else:
         # Update database reference for this request
-        rag_chat.database = database
+        rag_chats[cache_key].database = database
 
-    return rag_chat
+    return rag_chats[cache_key]
 
 
 @app.teardown_appcontext
@@ -294,7 +344,7 @@ def index():
     str
         Rendered HTML template
     """
-    llm_backend = get_llm_backend_info(resolve_chat_provider(_config).base_url)
+    llm_backend = get_llm_backend_info(resolve_generation_provider(_config, stage="chat").base_url)
     return render_template(
         "index.html",
         version=__version__,
@@ -332,7 +382,7 @@ def conference_index(conference_name):
     if conference_name.startswith("."):
         abort(404)
 
-    llm_backend = get_llm_backend_info(resolve_chat_provider(_config).base_url)
+    llm_backend = get_llm_backend_info(resolve_generation_provider(_config, stage="chat").base_url)
     try:
         database = get_database()
         result = database.resolve_conference_for_url(conference_name)
@@ -781,49 +831,75 @@ def chat():
         sessions = data.get("sessions", [])
         years = data.get("years", [])
         conferences = data.get("conferences", [])
+        generation_provider_id = data.get("generation_provider_id") or None
 
         if not message:
             return jsonify({"error": "Message is required"}), 400
 
-        rag = get_rag_chat()
+        config = get_config()
+        providers = resolve_generation_provider_chain(config, provider_id=generation_provider_id, stage="chat")
+        if not providers:
+            providers = [resolve_generation_provider(config, provider_id=generation_provider_id, stage="chat")]
 
-        if reset:
-            rag.reset_conversation()
+        last_error = None
+        response = None
+        selected_provider = None
+        for provider in providers:
+            try:
+                rag = get_rag_chat(provider.provider_id, provider=provider)
 
-        # Build metadata filter
-        filter_conditions = []
-        if sessions:
-            filter_conditions.append({"session": {"$in": sessions}})
-        if years:
-            # Convert years to integers for ChromaDB
-            year_ints = [int(y) for y in years]
-            filter_conditions.append({"year": {"$in": year_ints}})
-        if conferences:
-            filter_conditions.append({"conference": {"$in": conferences}})
+                if reset:
+                    rag.reset_conversation()
 
-        # Use $or operator if multiple conditions, otherwise use single condition
-        metadata_filter = None
-        if len(filter_conditions) > 1:
-            metadata_filter = {"$or": filter_conditions}
-        elif len(filter_conditions) == 1:
-            metadata_filter = filter_conditions[0]
+                # Build metadata filter
+                filter_conditions = []
+                if sessions:
+                    filter_conditions.append({"session": {"$in": sessions}})
+                if years:
+                    # Convert years to integers for ChromaDB
+                    year_ints = [int(y) for y in years]
+                    filter_conditions.append({"year": {"$in": year_ints}})
+                if conferences:
+                    filter_conditions.append({"conference": {"$in": conferences}})
 
-        # Get response with filters
-        database = get_database()
-        available_conferences = database.get_conferences()
-        response = rag.query(
-            message,
-            n_results=n_papers,
-            metadata_filter=metadata_filter,
-            conferences=conferences if conferences else None,
-            years=[int(y) for y in years] if years else None,
-            available_conferences=available_conferences,
-        )
+                # Use $or operator if multiple conditions, otherwise use single condition
+                metadata_filter = None
+                if len(filter_conditions) > 1:
+                    metadata_filter = {"$or": filter_conditions}
+                elif len(filter_conditions) == 1:
+                    metadata_filter = filter_conditions[0]
+
+                # Get response with filters
+                database = get_database()
+                available_conferences = database.get_conferences()
+                response = rag.query(
+                    message,
+                    n_results=n_papers,
+                    metadata_filter=metadata_filter,
+                    conferences=conferences if conferences else None,
+                    years=[int(y) for y in years] if years else None,
+                    available_conferences=available_conferences,
+                )
+                selected_provider = provider
+                break
+            except Exception as exc:
+                last_error = exc
+                if generation_provider_id and generation_provider_id != "auto":
+                    break
+                logger.warning("Generation provider %s failed: %s", provider.provider_id, exc)
+
+        if response is None:
+            raise RuntimeError(str(last_error) if last_error else "No generation provider could answer the chat request")
 
         return jsonify(
             {
                 "response": response,
                 "message": message,
+                "generation_provider": {
+                    "id": selected_provider.provider_id if selected_provider else None,
+                    "label": selected_provider.label if selected_provider else None,
+                    "model": selected_provider.model if selected_provider else None,
+                },
             }
         )
     except Exception as e:
@@ -841,8 +917,8 @@ def reset_chat():
         Success message
     """
     try:
-        rag = get_rag_chat()
-        rag.reset_conversation()
+        for rag in rag_chats.values():
+            rag.reset_conversation()
         return jsonify({"success": True, "message": "Conversation reset"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -865,12 +941,17 @@ def run_pais_candidate():
         data = request.get_json(silent=True)
         if not data:
             return jsonify({"error": "JSON body is required"}), 400
+        generation_provider_id = data.pop("generation_provider_id", None)
         try:
             candidate = PaisCandidateInput.model_validate(data)
         except ValidationError as exc:
             return jsonify({"error": "Invalid PAIS candidate", "details": exc.errors()}), 400
 
-        summary = run_candidate_pipeline(candidate, database=get_database())
+        summary = run_candidate_pipeline(
+            candidate,
+            database=get_database(),
+            generation_provider_id=generation_provider_id,
+        )
         return jsonify(summary)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -906,6 +987,7 @@ def pais_status():
                 "evidence_brief": config.pais_evidence_brief_model,
                 "extraction": config.pais_extraction_model,
                 "embedding": config.pais_embedding_model,
+                "generation_provider": getattr(config, "pais_generation_provider", ""),
             },
             "configured_base_urls": {
                 "screen": _sanitize_config_url(config.pais_screen_base_url),
@@ -914,8 +996,20 @@ def pais_status():
                 "embedding": _sanitize_config_url(config.pais_embedding_base_url),
             },
             "pais_structured_output_mode": config.pais_structured_output_mode,
+            "generation_providers": provider_status_payload(config),
         }
     )
+
+
+@app.route("/api/pais/providers")
+def pais_providers():
+    """Return frontend-safe generation provider config and live availability."""
+    config = get_config()
+    payload = provider_status_payload(config)
+    availability = _generation_provider_availability(config)
+    for provider in payload["providers"]:
+        provider["availability"] = availability.get(provider["id"], {"available": False, "reason": "unknown"})
+    return jsonify(payload)
 
 
 @app.route("/api/clusters/compute", methods=["POST"])

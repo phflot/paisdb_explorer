@@ -25,6 +25,12 @@ def _pais_config(**overrides):
         "pais_embedding_model": "",
         "pais_embedding_base_url": "",
         "pais_embedding_auth_token": "",
+        "pais_model_providers_config": "",
+        "pais_generation_provider": "",
+        "pais_generation_fallbacks": "",
+        "pais_chat_provider": "",
+        "pais_evidence_brief_provider": "",
+        "pais_extraction_provider": "",
         "pais_structured_output_mode": "json_schema",
     }
     values.update(overrides)
@@ -91,6 +97,7 @@ def test_pais_status_endpoint_returns_sanitized_configuration():
         "evidence_brief": "brief-model",
         "extraction": "extract-model",
         "embedding": "embed-model",
+        "generation_provider": "",
     }
     assert data["configured_base_urls"]["screen"] == "https://example.test/v1?tenant=public"
     assert data["configured_base_urls"]["evidence_brief"] == "https://brief.example.test/openai"
@@ -103,6 +110,43 @@ def test_pais_status_endpoint_returns_sanitized_configuration():
     assert "api_key" not in serialized
     assert "access_token" not in serialized
     assert "authorization" not in serialized
+
+
+def test_pais_providers_endpoint_returns_sanitized_provider_status(tmp_path):
+    flask_app.config["TESTING"] = True
+    config_path = tmp_path / "providers.yaml"
+    config_path.write_text(
+        """
+generation_providers:
+  local_qwen:
+    label: Local Qwen
+    model: Qwen/Qwen3-Coder-30B-A3B-Instruct
+    base_url: http://127.0.0.1:18100/v1?api_key=secret
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+    config = _pais_config(
+        pais_model_providers_config=str(config_path),
+        pais_generation_provider="local_qwen",
+    )
+    models_payload = {"data": [{"id": "Qwen/Qwen3-Coder-30B-A3B-Instruct"}]}
+
+    with (
+        patch("abstracts_explorer.web_ui.app.get_config", return_value=config),
+        patch("abstracts_explorer.web_ui.app.requests.get") as get,
+    ):
+        get.return_value.ok = True
+        get.return_value.status_code = 200
+        get.return_value.json.return_value = models_payload
+        with flask_app.test_client() as client:
+            response = client.get("/api/pais/providers")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["selected_provider_id"] == "local_qwen"
+    assert data["providers"][0]["base_url"] == "http://127.0.0.1:18100/v1"
+    assert data["providers"][0]["availability"]["available"] is True
 
 
 def test_pais_status_endpoint_marks_local_hf_screen_configured():

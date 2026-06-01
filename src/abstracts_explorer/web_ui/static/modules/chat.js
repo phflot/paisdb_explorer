@@ -20,6 +20,81 @@ let _feedbackHighlightShown = false;
 /** Monotonically increasing counter used to generate unique message IDs. */
 let _messageIdCounter = 0;
 
+let _chatLayoutResizeScheduled = false;
+let _chatLayoutObserver = null;
+
+/**
+ * Return the selected PAIS generation provider id.
+ * @returns {string} Provider id
+ */
+export function getSelectedGenerationProviderId() {
+    const selector = document.getElementById('generation-provider-selector');
+    return selector && selector.value ? selector.value : 'auto';
+}
+
+/**
+ * Resize the chat layout against actual viewport space below the header/tabs.
+ */
+export function resizeChatLayout() {
+    const layout = document.querySelector('.chat-layout');
+    if (!layout) return;
+    if (layout.offsetParent === null) return;
+    const rect = layout.getBoundingClientRect();
+    const bottomPadding = 24;
+    const available = window.innerHeight - rect.top - bottomPadding;
+    layout.style.height = `${Math.max(420, available)}px`;
+}
+
+/**
+ * Schedule a layout resize after pending DOM/banner updates have rendered.
+ */
+export function scheduleChatLayoutResize() {
+    if (_chatLayoutResizeScheduled) return;
+    _chatLayoutResizeScheduled = true;
+    const defer = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : callback => setTimeout(callback, 0);
+    defer(() => {
+        defer(() => {
+            _chatLayoutResizeScheduled = false;
+            resizeChatLayout();
+        });
+    });
+}
+
+function initChatLayoutObserver() {
+    if (_chatLayoutObserver || typeof ResizeObserver === 'undefined') return;
+    const targets = [
+        document.body,
+        document.querySelector('header'),
+        document.querySelector('main'),
+        document.getElementById('embedding-warning-banner'),
+        document.getElementById('conference-error-banner'),
+        document.getElementById('pais-status-banner')
+    ].filter(Boolean);
+
+    _chatLayoutObserver = new ResizeObserver(scheduleChatLayoutResize);
+    targets.forEach(target => _chatLayoutObserver.observe(target));
+}
+
+/**
+ * Attach chat input behavior and responsive layout observers.
+ */
+export function initChatInputBehavior() {
+    const input = document.getElementById('chat-input');
+    if (input) {
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendChatMessage();
+            }
+        });
+    }
+    window.addEventListener('resize', scheduleChatLayoutResize);
+    initChatLayoutObserver();
+    scheduleChatLayoutResize();
+}
+
 /**
  * Get the current chat donation consent status from localStorage.
  * @returns {boolean|null} true if accepted, false if declined, null if not yet asked
@@ -125,6 +200,7 @@ export async function sendChatMessage() {
     // Add user message
     addChatMessage(message, 'user');
     input.value = '';
+    scheduleChatLayoutResize();
 
     // Show loading
     const loadingId = addChatMessage('Thinking...', 'assistant', true);
@@ -142,7 +218,8 @@ export async function sendChatMessage() {
 
         const requestBody = {
             message,
-            n_papers: nPapers
+            n_papers: nPapers,
+            generation_provider_id: getSelectedGenerationProviderId()
         };
 
         // Add filters only if NOT all options are selected (all selected = no filter)

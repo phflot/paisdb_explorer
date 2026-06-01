@@ -198,7 +198,21 @@ class Config:
         self.pais_extraction_auth_token = self._get_env("PAIS_EXTRACTION_AUTH_TOKEN", default="")
         self.pais_embedding_model = self._get_env("PAIS_EMBEDDING_MODEL", default="")
         self.pais_embedding_base_url = self._get_env("PAIS_EMBEDDING_BASE_URL", default="")
-        self.pais_embedding_auth_token = self._get_env("PAIS_EMBEDDING_AUTH_TOKEN", default="")
+        self.pais_embedding_auth_token = self._get_env(
+            "PAIS_EMBEDDING_AUTH_TOKEN",
+            default=self._get_env("PAISDB_AI_API_KEY", default=""),
+        )
+        self.pais_model_providers_config = self._get_env(
+            "PAIS_MODEL_PROVIDERS_CONFIG", default="config/model_providers.yaml"
+        )
+        self.pais_generation_provider = self._get_env("PAIS_GENERATION_PROVIDER", default="remote_deepseek_v4_pro")
+        self.pais_generation_fallbacks = self._get_env(
+            "PAIS_GENERATION_FALLBACKS",
+            default="local_qwen3_coder_30b,remote_mistral_medium35,remote_mistral_small4,remote_mistral_large3",
+        )
+        self.pais_chat_provider = self._get_env("PAIS_CHAT_PROVIDER", default="")
+        self.pais_evidence_brief_provider = self._get_env("PAIS_EVIDENCE_BRIEF_PROVIDER", default="")
+        self.pais_extraction_provider = self._get_env("PAIS_EXTRACTION_PROVIDER", default="")
         self.pais_structured_output_mode = self._get_env("PAIS_STRUCTURED_OUTPUT_MODE", default="json_schema")
         self.pais_allow_adjudication_on_invalid_screen = self._get_env_bool(
             "PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN", default=False
@@ -447,6 +461,13 @@ class Config:
             "PAIS_EMBEDDING_MODEL",
             "PAIS_EMBEDDING_BASE_URL",
             "PAIS_EMBEDDING_AUTH_TOKEN",
+            "PAIS_MODEL_PROVIDERS_CONFIG",
+            "PAISDB_AI_API_KEY",
+            "PAIS_GENERATION_PROVIDER",
+            "PAIS_GENERATION_FALLBACKS",
+            "PAIS_CHAT_PROVIDER",
+            "PAIS_EVIDENCE_BRIEF_PROVIDER",
+            "PAIS_EXTRACTION_PROVIDER",
             "PAIS_STRUCTURED_OUTPUT_MODE",
             "PAIS_ALLOW_ADJUDICATION_ON_INVALID_SCREEN",
             "PAPER_DB",
@@ -510,6 +531,12 @@ class Config:
             "pais_extraction_base_url": self.pais_extraction_base_url,
             "pais_embedding_model": self.pais_embedding_model,
             "pais_embedding_base_url": self.pais_embedding_base_url,
+            "pais_model_providers_config": self.pais_model_providers_config,
+            "pais_generation_provider": self.pais_generation_provider,
+            "pais_generation_fallbacks": self.pais_generation_fallbacks,
+            "pais_chat_provider": self.pais_chat_provider,
+            "pais_evidence_brief_provider": self.pais_evidence_brief_provider,
+            "pais_extraction_provider": self.pais_extraction_provider,
             "pais_structured_output_mode": self.pais_structured_output_mode,
             "pais_allow_adjudication_on_invalid_screen": self.pais_allow_adjudication_on_invalid_screen,
             "embedding_db": self.embedding_db,

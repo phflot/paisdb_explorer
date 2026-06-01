@@ -23,6 +23,7 @@ from abstracts_explorer.pais_examples import EXAMPLES, get_example
 from abstracts_explorer.pais_llm import _api_url
 from abstracts_explorer.pais_pipeline import embed_pending_records, run_candidate_pipeline
 from abstracts_explorer.pais_schemas import PaisCandidateInput
+from abstracts_explorer.provider_routing import provider_status_payload, resolve_generation_provider_chain
 
 
 def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -43,10 +44,22 @@ def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
     _add_candidate_args(run_parser)
     run_parser.add_argument("--output", type=str, default=None, help="Write summary JSON to this path")
     run_parser.add_argument("--no-structured", action="store_true", help="Disable provider-native JSON schema mode")
+    run_parser.add_argument(
+        "--generation-provider",
+        type=str,
+        default=None,
+        help="Generation provider id for evidence brief and extraction; use 'auto' for fallback order",
+    )
 
     example_parser = pais_subparsers.add_parser("run-example", help="Run a built-in PAIS example")
     example_parser.add_argument("name", choices=sorted(EXAMPLES), help="Example fixture name")
     example_parser.add_argument("--output", type=str, default=None, help="Write summary JSON to this path")
+    example_parser.add_argument(
+        "--generation-provider",
+        type=str,
+        default=None,
+        help="Generation provider id for evidence brief and extraction; use 'auto' for fallback order",
+    )
     example_parser.add_argument(
         "--no-structured",
         action="store_true",
@@ -122,6 +135,12 @@ def add_pais_subparser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Do not skip rows that already have persisted screen/evidence records",
     )
+    ingest_parser.add_argument(
+        "--generation-provider",
+        type=str,
+        default=None,
+        help="Generation provider id for evidence brief and extraction; use 'auto' for fallback order",
+    )
 
     smoke_parser = pais_subparsers.add_parser("smoke", help="Inspect configured PAIS model endpoints")
     smoke_parser.add_argument(
@@ -141,9 +160,19 @@ def pais_command(args: argparse.Namespace) -> int:
         return _init_db_command()
     if args.pais_command == "run-candidate":
         candidate = _candidate_from_args(args)
-        return _run_candidate_command(candidate, output=args.output, structured=not args.no_structured)
+        return _run_candidate_command(
+            candidate,
+            output=args.output,
+            structured=not args.no_structured,
+            generation_provider_id=args.generation_provider,
+        )
     if args.pais_command == "run-example":
-        return _run_candidate_command(get_example(args.name), output=args.output, structured=not args.no_structured)
+        return _run_candidate_command(
+            get_example(args.name),
+            output=args.output,
+            structured=not args.no_structured,
+            generation_provider_id=args.generation_provider,
+        )
     if args.pais_command == "export-embedding-texts":
         return _export_embedding_texts_command(output=args.output, limit=args.limit)
     if args.pais_command == "embed-pending":
@@ -163,6 +192,7 @@ def pais_command(args: argparse.Namespace) -> int:
             fallback_from_brief=args.fallback_from_brief,
             embedding_batch_size=args.embedding_batch_size,
             resume=not args.no_resume,
+            generation_provider_id=args.generation_provider,
         )
     if args.pais_command == "smoke":
         return _smoke_command(no_network=args.no_network)
@@ -200,10 +230,20 @@ def _candidate_from_args(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _run_candidate_command(candidate_data: dict[str, Any], output: Optional[str], structured: bool) -> int:
+def _run_candidate_command(
+    candidate_data: dict[str, Any],
+    output: Optional[str],
+    structured: bool,
+    generation_provider_id: Optional[str],
+) -> int:
     candidate = PaisCandidateInput.model_validate(candidate_data)
     with DatabaseManager() as database:
-        summary = run_candidate_pipeline(candidate, database=database, structured=structured)
+        summary = run_candidate_pipeline(
+            candidate,
+            database=database,
+            structured=structured,
+            generation_provider_id=generation_provider_id,
+        )
     _write_json(summary, output)
     return 0
 
@@ -265,6 +305,7 @@ def _ingest_benchmark_command(
     fallback_from_brief: bool,
     embedding_batch_size: int,
     resume: bool,
+    generation_provider_id: Optional[str],
 ) -> int:
     with DatabaseManager() as database:
         if batched or screen_only:
@@ -281,6 +322,7 @@ def _ingest_benchmark_command(
                 embed=embed,
                 fallback_from_brief=fallback_from_brief,
                 embedding_batch_size=embedding_batch_size,
+                generation_provider_id=generation_provider_id,
             )
         else:
             summary = ingest_benchmark_dataset(
@@ -288,6 +330,7 @@ def _ingest_benchmark_command(
                 input_path=input_path,
                 limit=limit,
                 structured=structured,
+                generation_provider_id=generation_provider_id,
             )
     _write_json(summary, output)
     return 0
@@ -323,8 +366,20 @@ def _smoke_command(no_network: bool) -> int:
             "configured": bool(config.pais_embedding_model and config.pais_embedding_base_url),
             "model": config.pais_embedding_model,
         },
+        "generation_providers": provider_status_payload(config),
     }
     if not no_network:
+        provider_checks = []
+        for provider in resolve_generation_provider_chain(config, provider_id="auto", stage="chat"):
+            provider_checks.append(
+                {
+                    "id": provider.provider_id,
+                    "label": provider.label,
+                    "model": provider.model,
+                    "base_url": provider.base_url,
+                    **_check_models(provider.base_url, provider.auth_token or config.llm_backend_auth_token),
+                }
+            )
         screen_check = (
             {"ok": True, "skipped": True, "reason": "local hf_transformers backend"}
             if config.pais_screen_backend == "hf_transformers"
@@ -343,6 +398,7 @@ def _smoke_command(no_network: bool) -> int:
                 config.pais_embedding_base_url,
                 config.pais_embedding_auth_token or config.llm_backend_auth_token,
             ),
+            "generation_provider_models": provider_checks,
         }
     _write_json(report, None)
     return 0

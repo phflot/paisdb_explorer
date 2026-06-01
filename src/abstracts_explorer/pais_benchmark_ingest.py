@@ -90,6 +90,7 @@ def ingest_benchmark_dataset(
     llm_client: Optional[OpenAICompatiblePaisClient] = None,
     limit: Optional[int] = None,
     structured: Optional[bool] = None,
+    generation_provider_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run benchmark CSV rows through the production PAISDB Explorer pipeline."""
     path = Path(input_path) if input_path else default_benchmark_input_path()
@@ -97,6 +98,7 @@ def ingest_benchmark_dataset(
     summary: dict[str, Any] = {
         "input_path": str(path),
         "rows_seen": len(rows),
+        "generation_provider_id": generation_provider_id,
         "processed": 0,
         "failed": 0,
         "screen_status_counts": {},
@@ -115,6 +117,7 @@ def ingest_benchmark_dataset(
                 llm_client=llm_client,
                 structured=structured,
                 initial_quality_flags=benchmark_quality_flags(row_number, row, gold),
+                generation_provider_id=generation_provider_id,
             )
             summary["processed"] += 1
             status = run_summary.get("screen_status") or "unknown"
@@ -145,6 +148,7 @@ def ingest_benchmark_dataset_batched(
     embed: bool = False,
     embedding_batch_size: int = 64,
     fallback_from_brief: bool = False,
+    generation_provider_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run benchmark CSV rows through a stage-batched PAISDB pipeline."""
     path = Path(input_path) if input_path else default_benchmark_input_path()
@@ -167,6 +171,7 @@ def ingest_benchmark_dataset_batched(
         "screen_only": screen_only,
         "embed": embed,
         "fallback_from_brief": fallback_from_brief,
+        "generation_provider_id": generation_provider_id,
         "screen_status_counts": {},
         "enrichment_candidates": 0,
         "brief_runs": 0,
@@ -206,6 +211,7 @@ def ingest_benchmark_dataset_batched(
             hosted_chunk_size=hosted_chunk_size,
             resume=resume,
             fallback_from_brief=fallback_from_brief,
+            generation_provider_id=generation_provider_id,
         )
         summary["timings_s"]["hosted_enrichment"] = round(time.monotonic() - enrich_started, 3)
 
@@ -435,6 +441,7 @@ def _run_hosted_enrichment(
     hosted_chunk_size: int,
     resume: bool,
     fallback_from_brief: bool,
+    generation_provider_id: Optional[str],
 ) -> None:
     session = _session(database)
     allow_invalid_adjudication = bool(
@@ -479,7 +486,14 @@ def _run_hosted_enrichment(
     for chunk in _chunks(brief_jobs, chunk_size):
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {
-                pool.submit(build_evidence_brief, item.candidate, screen_result, client, structured): (
+                pool.submit(
+                    build_evidence_brief,
+                    item.candidate,
+                    screen_result,
+                    client,
+                    structured,
+                    generation_provider_id,
+                ): (
                     item,
                     screen_result,
                 )
@@ -530,6 +544,7 @@ def _run_hosted_enrichment(
                     brief_item.brief_result,
                     client,
                     structured,
+                    generation_provider_id,
                 ): brief_item
                 for brief_item in chunk
                 if not (resume and _relation_has_evidence(session, brief_item.item.relation_id))

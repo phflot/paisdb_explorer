@@ -78,6 +78,43 @@ npm run install:vendor
 
 📖 **[Full Installation Guide](docs/installation.md)**
 
+## PAISDB Model Routing
+
+PAISDB generation providers are configured in `config/model_providers.yaml`.
+The same registry drives the web UI dropdown and the database-build workflow.
+The benchmark screen stays fixed to local `mistralai/Mistral-Small-Instruct-2409`;
+the dropdown controls only chat, evidence brief, and structured extraction.
+
+```bash
+export PAISDB_AI_API_KEY=...
+export PAIS_MODEL_PROVIDERS_CONFIG=config/model_providers.yaml
+export PAIS_GENERATION_PROVIDER=remote_deepseek_v4_pro
+export PAIS_GENERATION_FALLBACKS=local_qwen3_coder_30b,remote_mistral_medium35
+export PAIS_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+export PAIS_EMBEDDING_BASE_URL=http://127.0.0.1:18180/v1
+```
+
+Start the local one-GPU fallback services from this repo. The scripts reuse the
+tested `llm_server/paisdb_model_host` vLLM environment and shared HF cache when
+available; `bootstrap_vllm_env.sh` only creates a repo-local fallback env if
+that shared environment is missing or `PAIS_LOCAL_VLLM_ENV` is set. Runtime
+home/cache paths are redirected under `.cache/local_models/`.
+
+```bash
+scripts/local_models/bootstrap_vllm_env.sh
+CUDA_VISIBLE_DEVICES=0 scripts/local_models/start_embedding_qwen8b.sh
+CUDA_VISIBLE_DEVICES=1 scripts/local_models/start_generation_qwen30b.sh
+scripts/local_models/smoke_local_models.sh
+```
+
+Run the database build with an explicit provider:
+
+```bash
+abstracts-explorer pais ingest-benchmark --batched --generation-provider remote_deepseek_v4_pro
+abstracts-explorer pais ingest-benchmark --batched --generation-provider local_qwen3_coder_30b
+abstracts-explorer pais ingest-benchmark --batched --generation-provider auto
+```
+
 ## Configuration
 
 Create a `.env` file to customize settings:

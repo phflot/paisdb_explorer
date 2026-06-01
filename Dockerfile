@@ -40,6 +40,7 @@ RUN useradd -m -u 1000 abstracts && \
 # Copy Python virtual environment from builder
 COPY --from=python-builder --chown=abstracts:abstracts /app/.venv /app/.venv
 COPY --from=python-builder --chown=abstracts:abstracts /app/src /app/src
+COPY --from=python-builder --chown=abstracts:abstracts /app/config /app/config
 
 # Copy additional necessary files
 COPY --chown=abstracts:abstracts README.md LICENSE ./

@@ -8,6 +8,7 @@
 
 import { API_BASE } from './utils/constants.js';
 import { escapeHtml } from './utils/dom-utils.js';
+import { getSelectedGenerationProviderId, scheduleChatLayoutResize } from './chat.js';
 
 let currentPaisPaper = null;
 let activePaisRequestId = 0;
@@ -115,6 +116,7 @@ function renderPaisResult(result) {
                 ${renderResultRow('candidate_relation_id', result.candidate_relation_id)}
                 ${renderResultRow('evidence_record_id', result.evidence_record_id)}
                 ${renderResultRow('embedding_record_id', result.embedding_record_id)}
+                ${renderResultRow('generation_provider_id', result.generation_provider_id)}
                 <div class="pais-result-row">
                     <dt>model_run_ids</dt>
                     <dd>${renderModelRunIds(result.model_run_ids)}</dd>
@@ -189,6 +191,60 @@ function renderPaisStatus(status) {
             ${modelText ? `<span class="pais-status-models">${escapeHtml(modelText)}</span>` : ''}
         </div>
     `;
+    scheduleChatLayoutResize();
+}
+
+function renderGenerationProviderSelector(payload) {
+    const selector = document.getElementById('generation-provider-selector');
+    if (!selector) return;
+
+    const providers = Array.isArray(payload.providers) ? payload.providers : [];
+    const saved = localStorage.getItem('paisGenerationProviderId');
+    const selected = saved || 'auto';
+    const options = [
+        {
+            id: 'auto',
+            label: `Auto (${payload.default_provider_id || 'configured order'})`,
+            title: 'Use the configured generation provider fallback order',
+        },
+        ...providers.map(provider => {
+            const availability = provider.availability || {};
+            const status = availability.available ? 'ready' : 'unavailable';
+            return {
+                id: provider.id,
+                label: `${provider.label || provider.id} · ${status}`,
+                title: `${provider.model || provider.id} at ${provider.base_url || 'unconfigured'}`,
+            };
+        }),
+    ];
+
+    selector.innerHTML = options.map(option => `
+        <option value="${escapeHtml(option.id)}" title="${escapeHtml(option.title)}">
+            ${escapeHtml(option.label)}
+        </option>
+    `).join('');
+    selector.value = options.some(option => option.id === selected) ? selected : 'auto';
+    selector.onchange = () => {
+        localStorage.setItem('paisGenerationProviderId', selector.value || 'auto');
+    };
+}
+
+async function initGenerationProviderSelector() {
+    const selector = document.getElementById('generation-provider-selector');
+    if (!selector) return;
+    try {
+        const response = await fetch(`${API_BASE}/api/pais/providers`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        renderGenerationProviderSelector(data);
+    } catch (error) {
+        selector.innerHTML = '<option value="auto">Auto (provider status unavailable)</option>';
+        selector.title = error.message || 'Provider status unavailable';
+    } finally {
+        scheduleChatLayoutResize();
+    }
 }
 
 function setSubmitPending(isPending) {
@@ -414,8 +470,10 @@ export async function initPaisStatus() {
             throw new Error(data.error || `HTTP ${response.status}`);
         }
         renderPaisStatus(data);
+        await initGenerationProviderSelector();
     } catch (error) {
         renderStatusUnavailable(error.message || 'Unknown error');
+        await initGenerationProviderSelector();
     }
 }
 
@@ -491,7 +549,10 @@ export async function submitPaisCandidate(event) {
         const response = await fetch(`${API_BASE}/api/pais/run-candidate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                ...payload,
+                generation_provider_id: getSelectedGenerationProviderId()
+            })
         });
         const data = await response.json().catch(() => ({}));
         if (requestId !== activePaisRequestId) return;

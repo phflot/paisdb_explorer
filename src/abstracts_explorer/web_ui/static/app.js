@@ -13,7 +13,7 @@ import { loadPriorities } from './modules/state.js';
 
 // Import feature modules
 import { searchPapers, openAdvancedSearch, closeAdvancedSearch, applyAdvancedSearch } from './modules/search.js';
-import { sendChatMessage, resetChat, openPapersModal, closePapersModal, handleChatFeedback, initMcpToolsHint } from './modules/chat.js';
+import { sendChatMessage, resetChat, openPapersModal, closePapersModal, handleChatFeedback, initMcpToolsHint, initChatInputBehavior } from './modules/chat.js';
 import {
     loadInterestingPapers,
     saveInterestingPapersAsMarkdown,
@@ -83,6 +83,7 @@ function initializeApp() {
 
     // Show MCP tools hint in chat area
     initMcpToolsHint();
+    initChatInputBehavior();
 
     // Setup modal event listeners
     setupModalEventListeners();

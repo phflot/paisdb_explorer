@@ -1,0 +1,60 @@
+generation_providers:
+  remote_deepseek_v4_pro:
+    label: DeepSeek V4 Pro remote
+    model: deepseek-ai/DeepSeek-V4-Pro
+    base_url: http://134.96.118.198:18000/v1
+    auth_token_env: PAISDB_AI_API_KEY
+    enabled: true
+    priority: 10
+    stages:
+      - chat
+      - evidence_brief
+      - structured_extraction
+
+  local_qwen3_coder_30b:
+    label: Local Qwen3 Coder 30B
+    model: Qwen/Qwen3-Coder-30B-A3B-Instruct
+    base_url: "${PAIS_LOCAL_QWEN_BASE_URL:-http://127.0.0.1:18100/v1}"
+    auth_token_env: PAISDB_AI_API_KEY
+    enabled: true
+    priority: 20
+    stages:
+      - chat
+      - evidence_brief
+      - structured_extraction
+
+  remote_mistral_medium35:
+    label: Mistral Medium 3.5 remote
+    model: mistralai/Mistral-Medium-3.5-128B
+    base_url: http://134.96.118.198:18000/v1
+    auth_token_env: PAISDB_AI_API_KEY
+    enabled: true
+    priority: 30
+    stages:
+      - chat
+      - evidence_brief
+      - structured_extraction
+
+  remote_mistral_small4:
+    label: Mistral Small 4 remote
+    model: mistralai/Mistral-Small-4-119B-2603
+    base_url: http://134.96.118.198:18000/v1
+    auth_token_env: PAISDB_AI_API_KEY
+    enabled: true
+    priority: 40
+    stages:
+      - chat
+      - evidence_brief
+      - structured_extraction
+
+  remote_mistral_large3:
+    label: Mistral Large 3 remote
+    model: mistralai/Mistral-Large-3-675B-Instruct-2512
+    base_url: http://134.96.118.198:18000/v1
+    auth_token_env: PAISDB_AI_API_KEY
+    enabled: true
+    priority: 50
+    stages:
+      - chat
+      - evidence_brief
+      - structured_extraction

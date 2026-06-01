@@ -49,6 +49,7 @@ def run_candidate_pipeline(
     llm_client: Optional[OpenAICompatiblePaisClient] = None,
     structured: Optional[bool] = None,
     initial_quality_flags: Optional[list[str]] = None,
+    generation_provider_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run the full PAIS candidate pipeline and persist provenance."""
     candidate = PaisCandidateInput.model_validate(candidate_data)
@@ -90,6 +91,7 @@ def run_candidate_pipeline(
             "model_run_ids": model_run_ids,
             "hosted_disagreement_flag": bool(relation.hosted_disagreement_flag),
             "quality_flags": _json_loads(relation.quality_flags_json, default=[]),
+            "generation_provider_id": generation_provider_id,
         }
 
         allow_invalid_adjudication = bool(
@@ -103,7 +105,11 @@ def run_candidate_pipeline(
         summary["server2_called"] = True
 
         brief_call, brief_result, brief_messages = build_evidence_brief(
-            candidate, screen_for_hosted, client, structured=structured
+            candidate,
+            screen_for_hosted,
+            client,
+            structured=structured,
+            generation_provider_id=generation_provider_id,
         )
         brief_run = _persist_model_run(
             session=session,
@@ -124,7 +130,12 @@ def run_candidate_pipeline(
             return summary
 
         extraction_call, extraction_result, extraction_messages = extract_evidence_record(
-            candidate, screen_for_hosted, brief_result, client, structured=structured
+            candidate,
+            screen_for_hosted,
+            brief_result,
+            client,
+            structured=structured,
+            generation_provider_id=generation_provider_id,
         )
         extraction_run = _persist_model_run(
             session=session,
@@ -196,9 +207,11 @@ def build_evidence_brief(
     screen_result: BenchmarkScreenResult,
     llm_client: OpenAICompatiblePaisClient,
     structured: Optional[bool] = None,
+    generation_provider_id: Optional[str] = None,
 ) -> tuple[PaisLLMResult, Optional[PAISEvidenceBriefResult], list[dict[str, str]]]:
     """Run the hosted evidence brief stage."""
     messages = build_evidence_brief_messages(candidate, screen_result)
+    kwargs = {"generation_provider_id": generation_provider_id} if generation_provider_id else {}
     call = llm_client.complete_json(
         messages=messages,
         schema_model=PAISEvidenceBriefResult,
@@ -206,6 +219,7 @@ def build_evidence_brief(
         temperature=0.0,
         max_tokens=1024,
         structured=structured,
+        **kwargs,
     )
     result = PAISEvidenceBriefResult.model_validate(call.parsed_json) if call.valid and call.parsed_json else None
     return call, result, messages
@@ -217,9 +231,11 @@ def extract_evidence_record(
     brief_result: PAISEvidenceBriefResult,
     llm_client: OpenAICompatiblePaisClient,
     structured: Optional[bool] = None,
+    generation_provider_id: Optional[str] = None,
 ) -> tuple[PaisLLMResult, Optional[PAISEvidenceExtractionResult], list[dict[str, str]]]:
     """Run the hosted structured extraction stage."""
     messages = build_structured_extraction_messages(candidate, screen_result, brief_result)
+    kwargs = {"generation_provider_id": generation_provider_id} if generation_provider_id else {}
     call = llm_client.complete_json(
         messages=messages,
         schema_model=PAISEvidenceExtractionResult,
@@ -227,6 +243,7 @@ def extract_evidence_record(
         temperature=0.0,
         max_tokens=3072,
         structured=structured,
+        **kwargs,
     )
     result = (
         PAISEvidenceExtractionResult.model_validate(call.parsed_json) if call.valid and call.parsed_json else None

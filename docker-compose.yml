@@ -29,6 +29,9 @@ services:
   abstracts-explorer:
     image: ghcr.io/thawn/abstracts-explorer:latest
     container_name: abstracts-explorer
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
     volumes:
       # Persist data directory
       - abstracts-data:/app/data

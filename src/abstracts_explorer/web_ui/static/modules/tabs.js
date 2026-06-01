@@ -9,6 +9,7 @@ import { getSelectedConference, getSelectedYears } from './utils/dom-utils.js';
 import { setCurrentTab, getCurrentTab } from './state.js';
 import { getInterestingPapersSortOrder } from './state.js';
 import { areClustersLoaded } from './clustering.js';
+import { scheduleChatLayoutResize } from './chat.js';
 
 /**
  * Switch to a different tab
@@ -30,6 +31,9 @@ export function switchTab(tab) {
         content.classList.add('hidden');
     });
     document.getElementById(`${tab}-tab`).classList.remove('hidden');
+    if (tab === 'chat') {
+        scheduleChatLayoutResize();
+    }
 
     // Load interesting papers when switching to that tab
     if (tab === 'interesting') {
